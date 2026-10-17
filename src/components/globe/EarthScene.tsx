@@ -380,14 +380,23 @@ function Marker({
     [outward],
   );
   const color = CATEGORY_HEX[event.category];
+  const ring = useRef<THREE.Mesh>(null);
+  const ink = useRef<THREE.Mesh>(null);
   const gl = useThree((state) => state.gl);
 
-  useFrame(({ camera }) => {
+  useFrame(({ camera, clock }) => {
     if (!group.current) return;
     group.current.getWorldPosition(world);
     camDir.copy(camera.position).normalize();
     group.current.visible = world.normalize().dot(camDir) > 0.12;
     group.current.scale.setScalar(calmZoom(camera.position.length()) * (selected ? 1.15 : 1));
+    if (ring.current) {
+      const pulse = 1 + Math.sin(clock.elapsedTime * 1.5 + event.lon * 0.04) * 0.14;
+      ring.current.scale.set(pulse, pulse, 1);
+    }
+    if (!ink.current) return;
+    const counter = 1 + Math.sin(clock.elapsedTime * 0.85 + event.lat * 0.05 + 1.4) * 0.1;
+    ink.current.scale.set(counter, counter, 1);
   });
 
   return (
@@ -412,9 +421,15 @@ function Marker({
         <meshBasicMaterial color={color} transparent opacity={active ? 1 : 0.38} toneMapped={false} />
       </mesh>
       {active ? (
-        <mesh quaternion={quat}>
+        <mesh ref={ring} quaternion={quat}>
           <ringGeometry args={[0.016, 0.019, 40]} />
           <meshBasicMaterial color={color} side={THREE.DoubleSide} transparent opacity={0.9} toneMapped={false} />
+        </mesh>
+      ) : null}
+      {active ? (
+        <mesh ref={ink} quaternion={quat}>
+          <ringGeometry args={[0.021, 0.0232, 48]} />
+          <meshBasicMaterial color={BRASS_HEX} side={THREE.DoubleSide} transparent opacity={0.5} toneMapped={false} />
         </mesh>
       ) : null}
       {selected ? (
@@ -562,6 +577,7 @@ function SceneContents() {
   const resume = useRef(0);
   const gl = useThree((state) => state.gl);
   const mode = useLogistics((state) => state.mode);
+  const layers = useLogistics((state) => state.layers);
 
   useEffect(() => {
     const max = gl.capabilities.getMaxAnisotropy();
@@ -580,18 +596,15 @@ function SceneContents() {
       <Atmosphere />
       {mode === "history" ? (
         <Markers />
-      ) : mode === "grid" ? (
-        <GridNet />
-      ) : mode === "materials" ? (
-        <ChainsNet />
-      ) : mode === "waste" ? (
-        <WasteNet />
-      ) : mode === "animal" ? (
-        <AnimalNet />
-      ) : mode === "data" ? (
-        <DataNet />
       ) : (
-        <LogisticsNet />
+        <>
+          {layers.logistics ? <LogisticsNet /> : null}
+          {layers.grid ? <GridNet /> : null}
+          {layers.materials ? <ChainsNet /> : null}
+          {layers.waste ? <WasteNet /> : null}
+          {layers.animal ? <AnimalNet /> : null}
+          {layers.data ? <DataNet /> : null}
+        </>
       )}
       <OrbitControls
         ref={controlsRef as never}

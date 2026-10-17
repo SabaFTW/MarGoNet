@@ -69,7 +69,7 @@ export const CHAINS: MaterialChain[] = [
   {
     id: "sand",
     label: "Sand",
-    color: "#e6c36a",
+    color: "#d4a35c",
     recipe: "Desert → bags → trucks → filter sand → shops",
     note: "Dune sand is the picture. What gets bagged is graded silica. Ottawa, Illinois sits on the St. Peter sandstone. Liwa is the edge of the Empty Quarter.",
     places: [
@@ -140,7 +140,7 @@ export const CHAINS: MaterialChain[] = [
   {
     id: "lithium",
     label: "Lithium",
-    color: "#7eb6d6",
+    color: "#8aa0ae",
     recipe: "Brine or pit → port → cells",
     note: "Two real sources. The Atacama brine leaves through Antofagasta. Greenbushes, the richest hard-rock pit, leaves through Bunbury. Both sketches end on the battery coast. Not a tonne count.",
     places: [
@@ -160,7 +160,7 @@ export const CHAINS: MaterialChain[] = [
   {
     id: "cobalt",
     label: "Cobalt",
-    color: "#6d7fd4",
+    color: "#a394c9",
     recipe: "Belt → port → cells",
     note: "Most of the world's cobalt is dug around Kolwezi. A southern exit is Durban, then the battery coast. Quotas change. This is the path, not a cargo list.",
     places: [
@@ -324,7 +324,7 @@ export function arrivingGw(cityId: string) {
 
 export function hungerColor(load: number, offered: number) {
   const ratio = load / Math.max(offered, 0.2);
-  if (ratio < 0.75) return "#7ddec4";
-  if (ratio < 1.15) return "#e6c36a";
-  return "#d4534a";
+  if (ratio < 0.75) return "#6aafa6";
+  if (ratio < 1.15) return "#c4a574";
+  return "#c46a58";
 }

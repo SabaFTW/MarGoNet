@@ -2,9 +2,10 @@ import type { ReactNode } from "react";
 import { X } from "lucide-react";
 import { ResizeHandle, useNarrow } from "@/components/aera/ResizeHandle";
 import { CHAINS, PLANTS, WIRES, arrivingGw, hungerColor } from "@/lib/logistics/chains";
+import { ROUTES } from "@/lib/logistics/data";
 import { ANIMAL_KINDS, ANIMAL_LANES, BINS, HERDS, WASTE_KINDS, WASTE_LANES, animalColor } from "@/lib/logistics/life";
 import { GLASS, HALLS, glassColor, glassSystems } from "@/lib/logistics/net";
-import { useLogistics } from "@/lib/logistics/store";
+import { useLogistics, type LayerId } from "@/lib/logistics/store";
 import { useTimeline } from "@/lib/timeline/store";
 
 function Shell({
@@ -347,6 +348,51 @@ export function DataBottom({ arriving = false }: { arriving?: boolean }) {
           </li>
         ))}
       </ul>
+    </Shell>
+  );
+}
+
+const STACK: { id: LayerId; label: string; color: string; fact: string; note: string }[] = [
+  { id: "logistics", label: "Flow", color: "#d4a35c", fact: `${ROUTES.length} cargo lanes`, note: "Ships are slow. The sun ring is the one current that does not pick a port." },
+  { id: "grid", label: "Grid", color: "#6aafa6", fact: `${PLANTS.filter((plant) => plant.role === "plant").length} plants · ${WIRES.length} lines`, note: "Power leaves in one direction and thins out. A city far from the plant is hungrier." },
+  { id: "materials", label: "Raw", color: "#c4a574", fact: `${CHAINS.length} chains`, note: "Forest to planks, mine to bars, sand to bags. Food is not in this layer." },
+  { id: "waste", label: "Waste", color: "#c46a58", fact: `${BINS.length} cities · ${WASTE_LANES.length} scrap lanes`, note: "About a billion tonnes of food a year. Most of it never leaves the city." },
+  { id: "animal", label: "Animals", color: "#a394c9", fact: `${HERDS.length} herds · ${ANIMAL_LANES.length} lanes`, note: "Meat and fish. A lot of it is eaten close to where it was raised." },
+  { id: "data", label: "Data", color: "#8aa0ae", fact: `${glassSystems(GLASS.filter((cable) => cable.kind === "ocean")).length} ocean cables · ${HALLS.filter((hall) => hall.role !== "landing").length} rooms`, note: "The halls stay. Light in the glass crosses the Atlantic in about 60 ms, there and back." },
+];
+
+export function StackBottom({ arriving = false }: { arriving?: boolean }) {
+  const layers = useLogistics((state) => state.layers);
+  const mode = useLogistics((state) => state.mode);
+  const focusLayer = useLogistics((state) => state.focusLayer);
+  const hungry = PLANTS.filter((plant) => plant.role === "city")
+    .slice()
+    .sort((a, b) => b.load / Math.max(arrivingGw(b.id), 0.2) - a.load / Math.max(arrivingGw(a.id), 0.2))[0];
+  const cards = STACK.filter((card) => layers[card.id]);
+  return (
+    <Shell side="bottom" kicker="On together" title="Stack" arriving={arriving}>
+      <div className="scroll-thin grid min-h-0 flex-1 grid-cols-1 gap-2 overflow-y-auto px-4 pb-4 sm:grid-cols-2">
+        {cards.map((card) => (
+          <button
+            key={card.id}
+            type="button"
+            className={`desk-row text-left ${mode === card.id ? "stock-on" : ""}`}
+            onClick={() => focusLayer(card.id)}
+          >
+            <span className="mt-1 size-2 shrink-0 rounded-full" style={{ background: card.color, boxShadow: `0 0 10px ${card.color}` }} />
+            <span className="min-w-0">
+              <span className="block text-sm font-medium">{card.label}</span>
+              <span className="block text-xs text-muted">{card.fact}</span>
+              <span className="mt-1 block text-xs leading-snug text-muted">{card.note}</span>
+              {card.id === "grid" && hungry ? (
+                <span className="mt-1 block text-xs" style={{ color: hungerColor(hungry.load, arrivingGw(hungry.id)) }}>
+                  Hungriest on this sketch: {hungry.name}
+                </span>
+              ) : null}
+            </span>
+          </button>
+        ))}
+      </div>
     </Shell>
   );
 }

@@ -1,6 +1,6 @@
 import { Html } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
-import { useMemo, useRef } from "react";
+import { useLayoutEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { calmZoom, latLonToXYZ } from "@/lib/timeline/geo";
 import { CHAINS, PLANTS, WIRES, arrivingGw, hungerColor, type Plant } from "@/lib/logistics/chains";
@@ -90,6 +90,7 @@ const ribbonFrag = /* glsl */ `
   uniform float uFlow;
   uniform float uFade;
   uniform float uSpan;
+  uniform float uPacket;
   void main() {
     float across = abs(vAcross);
     float travel = clamp(vAlong / max(uSpan, 0.0001), 0.0, 1.0);
@@ -98,6 +99,22 @@ const ribbonFrag = /* glsl */ `
     float reach = mix(1.0, mix(1.0, 0.4, fall), step(0.5, uFade));
     float road = smoothstep(reach, reach * 0.32, across);
     vec3 dye = mix(uColor, uColorB, travel);
+    if (uPacket > 0.5) {
+      float glass = smoothstep(0.95, 0.22, across);
+      float bitA = fract(vAlong * 2.1 - uTime * uSpeed);
+      float bitB = fract(vAlong * 4.4 - uTime * uSpeed * 1.7 + 0.37);
+      float dashA = smoothstep(0.0, 0.05, bitA) * smoothstep(0.48, 0.1, bitA);
+      float dashB = smoothstep(0.0, 0.02, bitB) * smoothstep(0.18, 0.04, bitB);
+      float body = smoothstep(1.0, 0.02, across);
+      float packet = max(dashA, dashB * 0.7) * body;
+      vec3 paper = vec3(0.922, 0.902, 0.863);
+      vec3 col = mix(dye * 0.72, paper, clamp(packet, 0.0, 1.0));
+      float alpha = max(glass * 0.34, packet) * uGain;
+      if (alpha < 0.04) discard;
+      gl_FragColor = vec4(col, alpha);
+      #include <colorspace_fragment>
+      return;
+    }
     if (uFlow < 0.5) {
       if (road * uGain * fade < 0.04) discard;
       gl_FragColor = vec4(dye, road * uGain * fade);
@@ -109,7 +126,7 @@ const ribbonFrag = /* glsl */ `
     float wing = mix(0.48, 0.0, smoothstep(0.02, 0.46, x)) * reach;
     float arrow = smoothstep(wing + 0.12, wing, across) * smoothstep(0.52, 0.2, x);
     float tip = smoothstep(0.42, 0.05, x) * arrow;
-    vec3 col = mix(dye * 0.78, vec3(0.98, 0.95, 0.88), tip);
+    vec3 col = mix(dye * 0.82, vec3(0.922, 0.902, 0.863), tip);
     float alpha = max(road * 0.55, arrow * 0.95) * uGain * fade;
     if (alpha < 0.04) discard;
     gl_FragColor = vec4(col, alpha);
@@ -119,6 +136,25 @@ const ribbonFrag = /* glsl */ `
 
 const MARK = 0.0084;
 const LIFT: Record<string, number> = { food: 1.014, auto: 1.021, meds: 1.028, fabric: 1.035 };
+const INK = "#c4a574";
+
+function InkLines({ lines }: { lines: { id: string; points: THREE.Vector3[] }[] }) {
+  const raised = useMemo(
+    () =>
+      lines.map((line) => ({
+        id: line.id,
+        points: line.points.map((point) => point.clone().normalize().multiplyScalar(point.length() + 0.005)),
+      })),
+    [lines],
+  );
+  return (
+    <>
+      {raised.map((line) => (
+        <Ribbon key={`ink-${line.id}`} points={line.points} color={INK} width={MARK * 0.38} speed={-0.48} gain={0.66} packet />
+      ))}
+    </>
+  );
+}
 
 function ribbonGeometry(points: THREE.Vector3[], width: number) {
   const positions: number[] = [];
@@ -169,6 +205,7 @@ function Ribbon({
   gain,
   flow = true,
   fade = false,
+  packet = false,
 }: {
   points: THREE.Vector3[];
   color: string;
@@ -178,6 +215,7 @@ function Ribbon({
   gain: number;
   flow?: boolean;
   fade?: boolean;
+  packet?: boolean;
 }) {
   const material = useRef<THREE.ShaderMaterial>(null);
   const reduced = useRef(typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
@@ -198,8 +236,9 @@ function Ribbon({
       uFlow: { value: flow ? 1 : 0 },
       uFade: { value: fade ? 1 : 0 },
       uSpan: { value: span },
+      uPacket: { value: packet ? 1 : 0 },
     }),
-    [color, colorB, fade, flow, gain, span, speed],
+    [color, colorB, fade, flow, gain, packet, span, speed],
   );
   useFrame(({ clock, camera }) => {
     if (!material.current) return;
@@ -265,9 +304,9 @@ function Arrows({ points, color, speed, closed }: { points: THREE.Vector3[]; col
 }
 
 function markColors(node: SupplyNode) {
-  if (node.desk === "tools") return ["#e0b15a"];
-  if (node.desk === "safety") return ["#6eb7c8"];
-  if (node.desk === "build") return ["#d08a4c"];
+  if (node.desk === "tools") return ["#c4a574"];
+  if (node.desk === "safety") return ["#6aafa6"];
+  if (node.desk === "build") return ["#d4a35c"];
   if (node.desk === "ore") return ["#b08968"];
   const colors = new Set<string>();
   for (const route of ROUTES) {
@@ -284,8 +323,9 @@ function NodeMark({ node, on }: { node: SupplyNode; on: boolean }) {
   const outward = useMemo(() => new THREE.Vector3(...position).normalize(), [position]);
   const quat = useMemo(() => new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), outward), [outward]);
   const group = useRef<THREE.Group>(null);
-  useFrame(({ camera }) => {
-    group.current?.scale.setScalar(calmZoom(camera.position.length()) * 0.7);
+  useFrame(({ camera, clock }) => {
+    const breathe = 1 + Math.sin(clock.elapsedTime * 1.25 + node.lat) * 0.045;
+    group.current?.scale.setScalar(calmZoom(camera.position.length()) * 0.7 * breathe);
   });
   const colors = markColors(node);
   return (
@@ -384,7 +424,6 @@ function ReliefPin({ node }: { node: SupplyNode }) {
 }
 
 export function LogisticsNet() {
-  const mode = useLogistics((state) => state.mode);
   const goods = useLogistics((state) => state.goods);
   const nets = useLogistics((state) => state.nets);
   const joined = useLogistics((state) => state.joined);
@@ -393,6 +432,7 @@ export function LogisticsNet() {
   const splits = useLogistics((state) => state.splits);
   const overrides = useLogistics((state) => state.overrides);
   const sun = useMemo(() => ringPoints(0.55, 1.02), []);
+  const sunInk = useMemo(() => sun.map((point) => point.clone().normalize().multiplyScalar(1.028)), [sun]);
   const nodes = useMemo(() => [...NODES, ...customNodes], [customNodes]);
   const arcs = useMemo(
     () =>
@@ -420,7 +460,6 @@ export function LogisticsNet() {
   );
   const meshes = useMemo(() => {
     const drawn: { id: string; kind: MeshKind; color: string; points: THREE.Vector3[] }[] = [];
-    if (mode === "grid") return drawn;
     for (const link of MESH_LINKS) {
       if (link.kind === "grid" || !nets[link.kind]) continue;
       const from = findNode(link.from);
@@ -434,22 +473,28 @@ export function LogisticsNet() {
       });
     }
     return drawn;
-  }, [mode, nets]);
+  }, [nets]);
   const visibleNodes = nodes.filter((node) => !node.desk || nets[node.desk]);
 
   return (
     <group>
-      <Ribbon points={sun} color="#e6c36a" width={MARK} speed={1.1} gain={0.75} />
-      <Arrows points={sun.slice(0, -1)} color="#f3e6c8" speed={0.04} closed />
+      <Ribbon points={sun} color={INK} width={MARK} speed={1.1} gain={0.75} />
+      <Ribbon points={sunInk} color="#ebe6dc" width={MARK * 0.34} speed={-0.55} gain={0.5} packet />
+      <Arrows points={sun.slice(0, -1)} color="#ebe6dc" speed={0.04} closed />
       {meshes.map((link) => (
         <Ribbon key={link.id} points={link.points} color={link.color} width={MARK} speed={0} gain={0.38} flow={false} />
       ))}
       {arcs.map((arc) => (
         <group key={arc.id}>
           <Ribbon points={arc.points} color={arc.color} width={MARK} speed={arc.speed * 18} gain={arc.gain} />
-          <Arrows points={arc.points} color="#f4efe4" speed={arc.speed} closed={false} />
+          <Arrows points={arc.points} color="#ebe6dc" speed={arc.speed} closed={false} />
         </group>
       ))}
+      <InkLines lines={arcs} />
+      <Beads
+        cables={arcs.map((arc) => ({ points: arc.points, color: arc.color, pace: Math.max(0.045, arc.speed), count: 3 }))}
+        radius={0.0075}
+      />
       {visibleNodes
         .filter((node) => RELIEF_IDS.has(node.id) && !node.desk)
         .map((node) => (
@@ -471,7 +516,7 @@ export function LogisticsNet() {
 
 function plantTone(plant: Plant) {
   if (plant.role === "city") return hungerColor(plant.load, arrivingGw(plant.id));
-  return "#7ddec4";
+  return "#6aafa6";
 }
 
 export function GridNet() {
@@ -487,7 +532,7 @@ export function GridNet() {
           {
             id: wire.id,
             points: arcBetween(from.lat, from.lon, to.lat, to.lon, 1.012),
-            color: "#7ddec4",
+            color: "#6aafa6",
             colorB: hungerColor(to.load, wire.gw),
             speed: 0.22 + wire.gw / 10,
           },
@@ -511,6 +556,11 @@ export function GridNet() {
           fade
         />
       ))}
+      <InkLines lines={cables} />
+      <Beads
+        cables={cables.map((cable) => ({ points: cable.points, color: cable.color, pace: 0.12, count: 4 }))}
+        radius={0.0065}
+      />
       {plants.map((plant) => (
         <PlantMark key={plant.id} plant={plant} selected={selectedId === plant.id} onSelect={() => selectNode(selectedId === plant.id ? null : plant.id)} />
       ))}
@@ -562,16 +612,20 @@ function PlantMark({ plant, selected, onSelect }: { plant: Plant; selected: bool
   const position = useMemo(() => latLonToXYZ(plant.lat, plant.lon, 1.012), [plant.lat, plant.lon]);
   const outward = useMemo(() => new THREE.Vector3(...position).normalize(), [position]);
   const quat = useMemo(() => new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), outward), [outward]);
+  const disc = useRef<THREE.MeshBasicMaterial>(null);
   const color = plantTone(plant);
   const radius = 0.034 + Math.min(plant.gw, 22) * 0.0035;
-  useFrame(({ camera }) => {
+  useFrame(({ camera, clock }) => {
     group.current?.scale.setScalar(calmZoom(camera.position.length()));
+    if (!disc.current) return;
+    const beat = 0.5 + Math.sin(clock.elapsedTime * 0.9 + plant.lat) * 0.5;
+    disc.current.opacity = (selected ? 0.28 : 0.12) + beat * 0.14;
   });
   return (
     <group ref={group} position={position}>
       <mesh quaternion={quat} raycast={() => undefined}>
         <circleGeometry args={[radius, 36]} />
-        <meshBasicMaterial color={color} transparent opacity={selected ? 0.4 : 0.22} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} side={THREE.DoubleSide} />
+        <meshBasicMaterial ref={disc} color={color} transparent opacity={selected ? 0.4 : 0.22} depthWrite={false} blending={THREE.AdditiveBlending} toneMapped={false} side={THREE.DoubleSide} />
       </mesh>
       <mesh
         onClick={(event) => {
@@ -610,11 +664,13 @@ export function ChainsNet() {
   return (
     <group>
       {arcs.map((arc) => (
-        <group key={arc.id}>
-          <Ribbon points={arc.points} color={arc.color} width={MARK} speed={0.35} gain={0.85} />
-          <Arrows points={arc.points} color="#f4efe4" speed={0.12} closed={false} />
-        </group>
+        <Ribbon key={arc.id} points={arc.points} color={arc.color} width={MARK} speed={0.55} gain={0.85} />
       ))}
+      <InkLines lines={arcs} />
+      <Beads
+        cables={arcs.map((arc) => ({ points: arc.points, color: arc.color, pace: 0.1, count: 3 }))}
+        radius={0.007}
+      />
       {places.map((place) => (
         <ChainHouse key={place.id} place={place} selected={selectedId === place.id} onSelect={() => selectNode(selectedId === place.id ? null : place.id)} />
       ))}
@@ -666,9 +722,9 @@ function ChainHouse({
 }
 
 function foodColor(share: number) {
-  if (share < 0.3) return "#e6c36a";
-  if (share < 0.45) return "#e08a3c";
-  return "#d4534a";
+  if (share < 0.3) return "#c4a574";
+  if (share < 0.45) return "#d4a35c";
+  return "#c46a58";
 }
 
 export function WasteNet() {
@@ -688,8 +744,13 @@ export function WasteNet() {
   return (
     <group>
       {lanes.map((lane) => (
-        <Ribbon key={lane.id} points={lane.points} color={lane.color} width={MARK} speed={0.28} gain={0.9} fade />
+        <Ribbon key={lane.id} points={lane.points} color={lane.color} width={MARK} speed={0.4} gain={0.9} fade />
       ))}
+      <InkLines lines={lanes} />
+      <Beads
+        cables={lanes.map((lane) => ({ points: lane.points, color: lane.color, pace: 0.055, count: 2 }))}
+        radius={0.006}
+      />
       {places.map((place) => (
         <LifeMark
           key={place.id}
@@ -722,8 +783,13 @@ export function AnimalNet() {
   return (
     <group>
       {lanes.map((lane) => (
-        <Ribbon key={lane.id} points={lane.points} color={lane.color} width={MARK} speed={0.32} gain={0.9} fade />
+        <Ribbon key={lane.id} points={lane.points} color={lane.color} width={MARK} speed={0.48} gain={0.9} fade />
       ))}
+      <InkLines lines={lanes} />
+      <Beads
+        cables={lanes.map((lane) => ({ points: lane.points, color: lane.color, pace: 0.09, count: 3 }))}
+        radius={0.007}
+      />
       {HERDS.map((herd) => (
         <LifeMark
           key={herd.id}
@@ -802,12 +868,15 @@ export function DataNet() {
         const from = byId.get(cable.from);
         const to = byId.get(cable.to);
         if (!from || !to) return [];
-        const fast = cable.kind === "land" ? 0.42 : 0.75 + Math.min(cable.tbps ?? 40, 400) / 520;
+        const pace = cable.kind === "land" ? 0.09 : cable.kind === "coast" ? 0.16 : 0.22 + Math.min(cable.tbps ?? 40, 400) / 2200;
+        const count = cable.kind === "ocean" ? 6 : 3;
         return [
           {
             id: cable.id,
             color: glassColor(cable.kind),
-            speed: fast,
+            speed: cable.kind === "land" ? 0.7 : cable.kind === "coast" ? 1.25 : 1.8 + Math.min(cable.tbps ?? 40, 400) / 260,
+            pace,
+            count,
             points: arcBetween(from.lat, from.lon, to.lat, to.lon, 1.012 + cable.lift * 0.004),
           },
         ];
@@ -817,8 +886,10 @@ export function DataNet() {
   return (
     <group>
       {cables.map((cable) => (
-        <Ribbon key={cable.id} points={cable.points} color={cable.color} width={MARK} speed={cable.speed} gain={0.95} />
+        <Ribbon key={cable.id} points={cable.points} color={cable.color} width={MARK} speed={cable.speed} gain={1} packet />
       ))}
+      <InkLines lines={cables} />
+      <Beads cables={cables} />
       {HALLS.map((hall) => (
         <DataMark
           key={hall.id}
@@ -828,6 +899,62 @@ export function DataNet() {
         />
       ))}
     </group>
+  );
+}
+
+function Beads({
+  cables,
+  radius = 0.009,
+}: {
+  cables: { points: THREE.Vector3[]; color: string; pace: number; count: number }[];
+  radius?: number;
+}) {
+  const mesh = useRef<THREE.InstancedMesh>(null);
+  const dummy = useMemo(() => new THREE.Object3D(), []);
+  const reduced = useRef(typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  const layout = useMemo(() => {
+    let total = 0;
+    const curves = cables.map((cable) => new THREE.CatmullRomCurve3(cable.points));
+    for (const cable of cables) total += cable.count;
+    return { curves, total };
+  }, [cables]);
+  useLayoutEffect(() => {
+    const current = mesh.current;
+    if (!current) return;
+    let index = 0;
+    for (const cable of cables) {
+      const color = new THREE.Color(cable.color).lerp(new THREE.Color("#ebe6dc"), 0.22);
+      for (let i = 0; i < cable.count; i += 1) current.setColorAt(index++, color);
+    }
+    if (current.instanceColor) current.instanceColor.needsUpdate = true;
+  }, [cables]);
+  useFrame(({ clock, camera }) => {
+    const current = mesh.current;
+    if (!current) return;
+    const zoom = calmZoom(camera.position.length());
+    const time = reduced.current ? 0 : clock.elapsedTime;
+    let index = 0;
+    for (let c = 0; c < cables.length; c += 1) {
+      const curve = layout.curves[c];
+      const count = cables[c].count;
+      const head = (time * cables[c].pace) % 1;
+      for (let i = 0; i < count; i += 1) {
+        const t = (head + i / count) % 1;
+        dummy.position.copy(curve.getPoint(t));
+        dummy.scale.setScalar(zoom * (i === 0 ? 1.15 : 0.72));
+        dummy.updateMatrix();
+        current.setMatrixAt(index, dummy.matrix);
+        index += 1;
+      }
+    }
+    current.instanceMatrix.needsUpdate = true;
+  });
+  if (layout.total === 0) return null;
+  return (
+    <instancedMesh ref={mesh} args={[undefined, undefined, layout.total]} raycast={() => undefined} frustumCulled={false}>
+      <sphereGeometry args={[radius, 10, 10]} />
+      <meshBasicMaterial color="#ffffff" toneMapped={false} transparent opacity={0.95} depthWrite={false} />
+    </instancedMesh>
   );
 }
 
@@ -842,11 +969,26 @@ function DataMark({
 }) {
   const group = useRef<THREE.Group>(null);
   const campus = hall.role !== "landing";
+  const mat = useRef<THREE.MeshBasicMaterial>(null);
+  const halo = useRef<THREE.Mesh>(null);
+  const haloMat = useRef<THREE.MeshBasicMaterial>(null);
+  const reduced = useRef(typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
   const position = useMemo(() => latLonToXYZ(hall.lat, hall.lon, 1.02), [hall.lat, hall.lon]);
   const outward = useMemo(() => new THREE.Vector3(...position).normalize(), [position]);
   const quat = useMemo(() => new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), outward), [outward]);
-  useFrame(({ camera }) => {
+  useFrame(({ clock, camera }) => {
     group.current?.scale.setScalar(calmZoom(camera.position.length()) * (selected ? 1.12 : 1) * 0.82);
+    if (reduced.current) return;
+    if (mat.current) {
+      const beat = 0.82 + Math.sin(clock.elapsedTime * (campus ? 1.4 : 2.2) + hall.lon * 0.2) * 0.18;
+      mat.current.color.setRGB(campus ? 0.86 * beat : 0.54 * beat, campus ? 0.82 * beat : 0.62 * beat, campus ? 0.74 * beat : 0.66 * beat);
+    }
+    if (campus && halo.current && haloMat.current) {
+      const t = (clock.elapsedTime * 0.42 + (hall.lat + 90) * 0.01) % 1;
+      const spread = 0.45 + t * 2.4;
+      halo.current.scale.setScalar(spread);
+      haloMat.current.opacity = (1 - t) * 0.5;
+    }
   });
   const label = hall.ix ? `${hall.name} · ${hall.ix}` : hall.name;
   return (
@@ -860,18 +1002,24 @@ function DataMark({
         }}
       >
         {campus ? <boxGeometry args={[0.011, 0.028, 0.009]} /> : <torusGeometry args={[0.012, 0.0015, 8, 20]} />}
-        <meshBasicMaterial color={campus ? "#9fd4ff" : "#6ec8ff"} toneMapped={false} />
+        <meshBasicMaterial ref={mat} color={campus ? "#d7ddd8" : "#8aa0ae"} toneMapped={false} />
       </mesh>
+      {campus ? (
+        <mesh ref={halo} position={[0, 0.004, 0]} rotation={[Math.PI / 2, 0, 0]} raycast={() => undefined}>
+          <torusGeometry args={[0.018, 0.0014, 8, 24]} />
+          <meshBasicMaterial ref={haloMat} color="#ebe6dc" toneMapped={false} transparent opacity={0} depthWrite={false} />
+        </mesh>
+      ) : null}
       {hall.role === "both" ? (
         <mesh position={[0, 0.004, 0]} rotation={[Math.PI / 2, 0, 0]} raycast={() => undefined}>
           <torusGeometry args={[0.016, 0.0013, 8, 20]} />
-          <meshBasicMaterial color="#6ec8ff" toneMapped={false} />
+          <meshBasicMaterial color="#8aa0ae" toneMapped={false} />
         </mesh>
       ) : null}
       {hall.ix ? (
         <mesh position={[0, 0.006, 0]} rotation={[Math.PI / 2, 0, 0]} raycast={() => undefined}>
           <torusGeometry args={[0.02, 0.0011, 8, 24]} />
-          <meshBasicMaterial color="#e6c36a" toneMapped={false} />
+          <meshBasicMaterial color="#c4a574" toneMapped={false} />
         </mesh>
       ) : null}
       {selected ? (

@@ -9,18 +9,18 @@ import { FrameStyle } from "@/components/aera/ResizeHandle";
 import { RollingYear } from "@/components/aera/RollingYear";
 import { SpanBar } from "@/components/aera/SpanBar";
 import { YearWheel } from "@/components/aera/YearWheel";
-import { useLogistics } from "@/lib/logistics/store";
+import { useLogistics, type LayerId } from "@/lib/logistics/store";
 import { FlowPanel, PlanPanel, StockPanel } from "@/components/logistics/LogisticsPanels";
-import { AnimalBottom, AnimalLeft, AnimalRight, DataBottom, DataLeft, DataRight, GridBottom, GridLeft, GridRight, MaterialBottom, MaterialLeft, MaterialRight, WasteBottom, WasteLeft, WasteRight } from "@/components/logistics/ExtraPanels";
+import { AnimalBottom, AnimalLeft, AnimalRight, DataBottom, DataLeft, DataRight, GridBottom, GridLeft, GridRight, MaterialBottom, MaterialLeft, MaterialRight, StackBottom, WasteBottom, WasteLeft, WasteRight } from "@/components/logistics/ExtraPanels";
 
 const MODES = [
   { id: "history", label: "History", color: "#c4a574" },
-  { id: "logistics", label: "Flow", color: "#e08a3c" },
-  { id: "grid", label: "Grid", color: "#7ddec4" },
-  { id: "materials", label: "Raw", color: "#e6c36a" },
-  { id: "waste", label: "Waste", color: "#d4534a" },
-  { id: "animal", label: "Animals", color: "#6eb7c8" },
-  { id: "data", label: "Data", color: "#6ec8ff" },
+  { id: "logistics", label: "Flow", color: "#d4a35c" },
+  { id: "grid", label: "Grid", color: "#6aafa6" },
+  { id: "materials", label: "Raw", color: "#c4a574" },
+  { id: "waste", label: "Waste", color: "#c46a58" },
+  { id: "animal", label: "Animals", color: "#a394c9" },
+  { id: "data", label: "Data", color: "#8aa0ae" },
 ] as const;
 
 const KICKER: Record<(typeof MODES)[number]["id"], string> = {
@@ -45,6 +45,7 @@ export function AppShell() {
   const togglePanel = useTimeline((state) => state.togglePanel);
   const mode = useLogistics((state) => state.mode);
   const setMode = useLogistics((state) => state.setMode);
+  const layers = useLogistics((state) => state.layers);
   const drift = useLogistics((state) => state.drift);
   const setDrift = useLogistics((state) => state.setDrift);
   const tabsOn = useLogistics((state) => state.tabsOn);
@@ -58,6 +59,16 @@ export function AppShell() {
   const line = meanwhile(year, active, selected);
   const era = year < 0 ? "BC" : year === 0 ? "BC · AD" : "AD";
   const spoken = year === 0 ? "year 0" : year < 0 ? `${Math.abs(year)} BC` : `${year} AD`;
+  const live = MODES.filter((item) => item.id !== "history" && layers[item.id as LayerId]);
+  const stacked = mode !== "history" && live.length > 1;
+  const kicker = mode === "history" ? KICKER.history : live.map((item) => item.label).join(" · ");
+
+  useEffect(() => {
+    const state = useLogistics.getState();
+    if (state.mode !== "history" && state.layers && !Object.values(state.layers).some(Boolean)) {
+      useLogistics.setState({ layers: { ...state.layers, [state.mode]: true } });
+    }
+  }, []);
 
   useEffect(() => {
     const id = window.setTimeout(() => setArriving(false), 760);
@@ -109,11 +120,6 @@ export function AppShell() {
     <div className="sky relative h-dvh w-full overflow-hidden text-fg">
       <div className={`omen omen-hydra ${!entered || mode === "history" ? "omen-on" : ""}`} aria-hidden />
       <div className={`omen omen-baphomet ${entered && mode === "logistics" ? "omen-on" : ""}`} aria-hidden />
-      <div className={`omen omen-grid ${entered && mode === "grid" ? "omen-on" : ""}`} aria-hidden />
-      <div className={`omen omen-materials ${entered && mode === "materials" ? "omen-on" : ""}`} aria-hidden />
-      <div className={`omen omen-waste ${entered && mode === "waste" ? "omen-on" : ""}`} aria-hidden />
-      <div className={`omen omen-animal ${entered && mode === "animal" ? "omen-on" : ""}`} aria-hidden />
-      <div className={`omen omen-data ${entered && mode === "data" ? "omen-on" : ""}`} aria-hidden />
       {entered ? (
         <div className="globe-root globe-in absolute inset-0">
           <EarthScene />
@@ -146,7 +152,7 @@ export function AppShell() {
 
       <header className={`chrome-rise pointer-events-none absolute inset-x-0 top-0 z-30 px-6 pt-4 text-center ${entered ? "" : "invisible"}`}>
         <p className="kicker">
-          {KICKER[mode]}
+          {kicker}
         </p>
         <h1 className="mt-1">
           <button type="button" className="wordmark pointer-events-auto" aria-expanded={tabsOn} onClick={() => setTabsOn(!tabsOn)}>
@@ -154,21 +160,39 @@ export function AppShell() {
           </button>
         </h1>
         <div className={`mode-row pointer-events-auto ${tabsOn ? "mode-row-open" : ""}`} role="tablist" aria-label="Mode" aria-hidden={!tabsOn}>
-          {MODES.map((item) => (
+          <button
+            type="button"
+            className={`era-switch ${mode === "history" ? "" : "era-on"}`}
+            role="switch"
+            aria-checked={mode !== "history"}
+            aria-label={mode === "history" ? "History on. Switch to Flow." : "Flow on. Switch to History."}
+            onClick={() => setMode(mode === "history" ? "logistics" : "history")}
+          >
+            <span className="era-knob" />
+            <span className="era-label era-history">History</span>
+            <span className="era-label era-flow">Flow</span>
+          </button>
+          {MODES.filter((item) => item.id !== "history" && item.id !== "logistics").map((item) => {
+            const locked = mode === "history";
+            const on = !locked && layers[item.id as LayerId];
+            return (
             <button
               key={item.id}
               type="button"
               role="tab"
-              aria-selected={mode === item.id}
+              aria-selected={on}
+              aria-disabled={locked}
+              className={locked ? "mode-locked" : ""}
               onClick={() => setMode(item.id)}
             >
               <span
                 className="mode-pip"
-                style={mode === item.id ? { background: item.color, borderColor: item.color, boxShadow: `0 0 12px ${item.color}` } : undefined}
+                style={on ? { background: item.color, borderColor: item.color, boxShadow: `0 0 12px ${item.color}` } : undefined}
               />
               {item.label}
             </button>
-          ))}
+            );
+          })}
           <button type="button" className={drift ? "drift-on" : ""} aria-pressed={drift} onClick={() => setDrift(!drift)}>
             <span className="mode-pip" style={drift ? { background: "#c4a574", borderColor: "#c4a574" } : undefined} />
             Drift
@@ -217,37 +241,37 @@ export function AppShell() {
         <>
           <GridLeft arriving={arriving} />
           <GridRight arriving={arriving} />
-          <GridBottom arriving={arriving} />
+          {stacked ? <StackBottom arriving={arriving} /> : <GridBottom arriving={arriving} />}
         </>
       ) : entered && mode === "materials" ? (
         <>
           <MaterialLeft arriving={arriving} />
           <MaterialRight arriving={arriving} />
-          <MaterialBottom arriving={arriving} />
+          {stacked ? <StackBottom arriving={arriving} /> : <MaterialBottom arriving={arriving} />}
         </>
       ) : entered && mode === "waste" ? (
         <>
           <WasteLeft arriving={arriving} />
           <WasteRight arriving={arriving} />
-          <WasteBottom arriving={arriving} />
+          {stacked ? <StackBottom arriving={arriving} /> : <WasteBottom arriving={arriving} />}
         </>
       ) : entered && mode === "animal" ? (
         <>
           <AnimalLeft arriving={arriving} />
           <AnimalRight arriving={arriving} />
-          <AnimalBottom arriving={arriving} />
+          {stacked ? <StackBottom arriving={arriving} /> : <AnimalBottom arriving={arriving} />}
         </>
       ) : entered && mode === "data" ? (
         <>
           <DataLeft arriving={arriving} />
           <DataRight arriving={arriving} />
-          <DataBottom arriving={arriving} />
+          {stacked ? <StackBottom arriving={arriving} /> : <DataBottom arriving={arriving} />}
         </>
       ) : (
         <>
           <PlanPanel arriving={arriving} />
           <StockPanel arriving={arriving} />
-          <FlowPanel arriving={arriving} />
+          {stacked ? <StackBottom arriving={arriving} /> : <FlowPanel arriving={arriving} />}
         </>
       )}
 
@@ -278,7 +302,7 @@ export function AppShell() {
           onClick={() => togglePanel("bottom")}
         >
           <PanelBottom className="size-4" />
-          {mode === "history" ? "Span" : mode === "grid" ? "Cables" : mode === "materials" ? "Chains" : mode === "waste" ? "Moved" : mode === "animal" ? "Lanes" : mode === "data" ? "Glass" : "Flow"}
+          {mode === "history" ? "Span" : stacked ? "Stack" : mode === "grid" ? "Cables" : mode === "materials" ? "Chains" : mode === "waste" ? "Moved" : mode === "animal" ? "Lanes" : mode === "data" ? "Glass" : "Flow"}
         </button>
       ) : null}
     </div>

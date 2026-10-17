@@ -3,12 +3,24 @@ import { createJSONStorage, persist } from "zustand/middleware";
 import { COMMODITIES, MESHES, NODES, nearestJoin, resolveRoutes, type Commodity, type MeshKind, type StockKey, type SupplyNode, type SupplyRoute, type Split } from "./data";
 
 export type AppMode = "history" | "logistics" | "grid" | "materials" | "waste" | "animal" | "data";
+export type LayerId = Exclude<AppMode, "history">;
+
+const layersOff = (): Record<LayerId, boolean> => ({
+  logistics: false,
+  grid: false,
+  materials: false,
+  waste: false,
+  animal: false,
+  data: false,
+});
 
 type ExtraStep = { id: string; title: string; body: string };
 
 type LogisticsState = {
   mode: AppMode;
   setMode: (mode: AppMode) => void;
+  layers: Record<LayerId, boolean>;
+  focusLayer: (mode: LayerId) => void;
   drift: boolean;
   setDrift: (drift: boolean) => void;
   tabsOn: boolean;
@@ -52,7 +64,25 @@ export const useLogistics = create<LogisticsState>()(
   persist(
     (set, get) => ({
       mode: "history",
-      setMode: (mode) => set({ mode }),
+      layers: layersOff(),
+      setMode: (mode) => {
+        if (mode === "history") {
+          set({ mode: "history", layers: layersOff() });
+          return;
+        }
+        if (get().mode === "history") {
+          set({ mode, layers: { ...layersOff(), [mode]: true } });
+          return;
+        }
+        const layers = { ...get().layers, [mode]: !get().layers[mode] };
+        const still = (Object.keys(layers) as LayerId[]).filter((id) => layers[id]);
+        if (still.length === 0) {
+          set({ mode: "history", layers: layersOff() });
+          return;
+        }
+        set({ layers, mode: layers[mode] ? mode : still[still.length - 1] });
+      },
+      focusLayer: (mode) => set({ mode, layers: { ...get().layers, [mode]: true } }),
       drift: true,
       setDrift: (drift) => set({ drift }),
       tabsOn: false,
@@ -155,6 +185,7 @@ export const useLogistics = create<LogisticsState>()(
       storage: createJSONStorage(() => (typeof window === "undefined" ? memoryStorage : localStorage)),
       partialize: (state) => ({
         mode: state.mode,
+        layers: state.layers,
         drift: state.drift,
         tabsOn: state.tabsOn,
         goods: state.goods,

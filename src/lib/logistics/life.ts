@@ -4,7 +4,7 @@ export const WASTE_KINDS: { id: WasteKind; label: string; color: string; tonnes:
   {
     id: "food",
     label: "Food",
-    color: "#d4534a",
+    color: "#c46a58",
     tonnes: "about 1 billion tonnes a year",
     note: "UNEP's order of magnitude. Most of it is households. Almost none of it gets on a ship.",
   },
@@ -25,7 +25,7 @@ export const WASTE_KINDS: { id: WasteKind; label: string; color: string; tonnes:
   {
     id: "ewaste",
     label: "Electronics",
-    color: "#6d7fd4",
+    color: "#a394c9",
     tonnes: "about 60 million tonnes a year",
     note: "The Global E-waste Monitor's order. A lot is local. A little is used gear that lands somewhere else.",
   },
@@ -88,9 +88,9 @@ export type AnimalKind = "cattle" | "pigs" | "poultry" | "fish" | "sheep";
 
 export const ANIMAL_KINDS: { id: AnimalKind; label: string; color: string; note: string }[] = [
   { id: "cattle", label: "Cattle", color: "#c46a58", note: "Brazil is the large exporter. China is the large buyer. The Middle East takes a real share." },
-  { id: "pigs", label: "Pigs", color: "#e0b15a", note: "China raises and eats most of the world's pigs. The US sends a share south and across the Pacific." },
-  { id: "poultry", label: "Poultry", color: "#e6c36a", note: "Frozen chicken moves. Brazil and the US south both sell into West Africa and Asia." },
-  { id: "fish", label: "Fish", color: "#6eb7c8", note: "Peru's anchovy becomes feed and leaves for China. Norwegian salmon also sails past Europe." },
+  { id: "pigs", label: "Pigs", color: "#d4a35c", note: "China raises and eats most of the world's pigs. The US sends a share south and across the Pacific." },
+  { id: "poultry", label: "Poultry", color: "#d4a35c", note: "Frozen chicken moves. Brazil and the US south both sell into West Africa and Asia." },
+  { id: "fish", label: "Fish", color: "#6aafa6", note: "Peru's anchovy becomes feed and leaves for China. Norwegian salmon also sails past Europe." },
   { id: "sheep", label: "Sheep", color: "#d4a35c", note: "Live sheep still leave Fremantle for the Gulf. New Zealand's meat goes to China." },
 ];
 
@@ -149,9 +149,9 @@ export const ANIMAL_LANES: AnimalLane[] = [
 ];
 
 export function animalColor(kind: AnimalKind) {
-  return ANIMAL_KINDS.find((item) => item.id === kind)?.color ?? "#e6c36a";
+  return ANIMAL_KINDS.find((item) => item.id === kind)?.color ?? "#c4a574";
 }
 
 export function wasteColor(kind: WasteKind) {
-  return WASTE_KINDS.find((item) => item.id === kind)?.color ?? "#d4534a";
+  return WASTE_KINDS.find((item) => item.id === kind)?.color ?? "#c46a58";
 }

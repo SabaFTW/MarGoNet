@@ -196,9 +196,9 @@ export const GLASS: Glass[] = [
 ];
 
 export function glassColor(kind: GlassKind) {
-  if (kind === "land") return "#e6c36a";
-  if (kind === "coast") return "#b7a6e6";
-  return "#6ec8ff";
+  if (kind === "land") return "#c4a574";
+  if (kind === "coast") return "#a394c9";
+  return "#8aa0ae";
 }
 
 export function glassSystems(cables: Glass[]) {

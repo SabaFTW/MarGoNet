@@ -3,10 +3,10 @@ import { latLonToXYZ } from "@/lib/timeline/geo";
 export type Commodity = "food" | "auto" | "meds" | "fabric";
 
 export const COMMODITIES: { id: Commodity; label: string; hint: string; color: string }[] = [
-  { id: "food", label: "Food", hint: "Local first", color: "#e08a3c" },
-  { id: "auto", label: "Auto", hint: "Use, repair, strip, melt", color: "#d4534a" },
-  { id: "meds", label: "Meds", hint: "Hospitals before hubs", color: "#3eae72" },
-  { id: "fabric", label: "Fabric", hint: "Cloth, not costume", color: "#4c8dff" },
+  { id: "food", label: "Food", hint: "Local first", color: "#d4a35c" },
+  { id: "auto", label: "Auto", hint: "Use, repair, strip, melt", color: "#c46a58" },
+  { id: "meds", label: "Meds", hint: "Hospitals before hubs", color: "#6aafa6" },
+  { id: "fabric", label: "Fabric", hint: "Cloth, not costume", color: "#a394c9" },
 ];
 
 export type StockKey = "food" | "meds" | "construction" | "parts" | "energy" | "nuclear" | "coal" | "green";
@@ -283,11 +283,11 @@ export const ROUTES: SupplyRoute[] = [
 export type MeshKind = "tools" | "safety" | "build" | "ore" | "grid";
 
 export const MESHES: { id: MeshKind; label: string; hint: string; color: string }[] = [
-  { id: "tools", label: "Ingersoll Rand", hint: "Desks you can call", color: "#e0b15a" },
-  { id: "safety", label: "Helly Hansen", hint: "Safety gear", color: "#6eb7c8" },
-  { id: "build", label: "Construction", hint: "Cement and stone", color: "#d08a4c" },
+  { id: "tools", label: "Ingersoll Rand", hint: "Desks you can call", color: "#c4a574" },
+  { id: "safety", label: "Helly Hansen", hint: "Safety gear", color: "#6aafa6" },
+  { id: "build", label: "Construction", hint: "Cement and stone", color: "#d4a35c" },
   { id: "ore", label: "Raw ore", hint: "Intake, not a factory", color: "#b08968" },
-  { id: "grid", label: "Electrogrid", hint: "Access, power, load", color: "#7ddec4" },
+  { id: "grid", label: "Electrogrid", hint: "Access, power, load", color: "#6aafa6" },
 ];
 
 export type MeshLink = { id: string; from: string; to: string; kind: MeshKind };
@@ -410,20 +410,20 @@ function mixHex(from: string, to: string, t: number) {
 export function gridTone(power: number, load: number, access: number) {
   const ratio = load / Math.max(power, 8);
   const t = Math.min(1, Math.max(0, (ratio - 0.55) / 0.85));
-  const color = t < 0.5 ? mixHex("#7ddec4", "#e6c36a", t * 2) : mixHex("#e6c36a", "#d4534a", (t - 0.5) * 2);
+  const color = t < 0.5 ? mixHex("#6aafa6", "#c4a574", t * 2) : mixHex("#c4a574", "#c46a58", (t - 0.5) * 2);
   return { color, alpha: 0.3 + (access / 100) * 0.7 };
 }
 
 export function nodeColor(node: SupplyNode) {
-  if (node.desk === "tools") return "#e0b15a";
-  if (node.desk === "safety") return "#6eb7c8";
-  if (node.desk === "build") return "#d08a4c";
+  if (node.desk === "tools") return "#c4a574";
+  if (node.desk === "safety") return "#6aafa6";
+  if (node.desk === "build") return "#d4a35c";
   if (node.desk === "ore") return "#b08968";
   const ranked = [
-    { value: node.food, color: "#e08a3c" },
-    { value: node.parts, color: "#d4534a" },
-    { value: node.meds, color: "#3eae72" },
-    { value: node.construction, color: "#4c8dff" },
+    { value: node.food, color: "#d4a35c" },
+    { value: node.parts, color: "#c46a58" },
+    { value: node.meds, color: "#6aafa6" },
+    { value: node.construction, color: "#a394c9" },
   ].sort((a, b) => b.value - a.value);
   return ranked[0].color;
 }

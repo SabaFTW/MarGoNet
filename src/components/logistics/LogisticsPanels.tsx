@@ -65,7 +65,7 @@ export function PlanPanel({ arriving = false }: { arriving?: boolean }) {
               onClick={() => toggleNet(item.id)}
             >
               {item.id === "grid" ? (
-                <span className="desk-halo" style={{ background: "linear-gradient(90deg, #7ddec4, #e6c36a, #d4534a)" }} />
+                <span className="desk-halo" style={{ background: "linear-gradient(90deg, #6aafa6, #c4a574, #c46a58)" }} />
               ) : (
                 <svg className="desk-house" viewBox="0 0 16 16" aria-hidden>
                   <path d="M2 7.2 8 2.4l6 4.8V14H2Z" fill={item.color} />
@@ -125,11 +125,11 @@ export function PlanPanel({ arriving = false }: { arriving?: boolean }) {
 }
 
 const BARS: { key: StockKey; label: string; color: string }[] = [
-  { key: "food", label: "Food", color: "#e08a3c" },
-  { key: "meds", label: "Meds", color: "#3eae72" },
+  { key: "food", label: "Food", color: "#d4a35c" },
+  { key: "meds", label: "Meds", color: "#6aafa6" },
   { key: "construction", label: "Build", color: "#c4a574" },
-  { key: "parts", label: "Parts", color: "#d4534a" },
-  { key: "energy", label: "Power", color: "#e6c36a" },
+  { key: "parts", label: "Parts", color: "#c46a58" },
+  { key: "energy", label: "Power", color: "#c4a574" },
   { key: "nuclear", label: "NewClear", color: "#7dcea0" },
 ];
 
@@ -308,7 +308,7 @@ export function FlowPanel({ arriving = false }: { arriving?: boolean }) {
               <span
                 className="size-2 rounded-full"
                 style={{
-                  background: item.id === "grid" ? "linear-gradient(90deg, #7ddec4, #e6c36a, #d4534a)" : item.color,
+                  background: item.id === "grid" ? "linear-gradient(90deg, #6aafa6, #c4a574, #c46a58)" : item.color,
                 }}
               />
               {item.label}
