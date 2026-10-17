@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { PanelBottom, PanelLeft, PanelRight, X } from "lucide-react";
-import { allEvents, findEvent, isChecked } from "@/lib/timeline/events";
-import { meanwhile } from "@/lib/timeline/format";
+import { findEvent } from "@/lib/timeline/events";
 import { useTimeline } from "@/lib/timeline/store";
 import EarthScene from "@/components/globe/EarthScene";
 import { LeftLedger } from "@/components/aera/LeftLedger";
@@ -11,7 +10,7 @@ import { SpanBar } from "@/components/aera/SpanBar";
 import { YearWheel } from "@/components/aera/YearWheel";
 import { useLogistics, type LayerId } from "@/lib/logistics/store";
 import { FlowPanel, PlanPanel, StockPanel } from "@/components/logistics/LogisticsPanels";
-import { AnimalBottom, AnimalLeft, AnimalRight, DataBottom, DataLeft, DataRight, GridBottom, GridLeft, GridRight, MaterialBottom, MaterialLeft, MaterialRight, StackBottom, WasteBottom, WasteLeft, WasteRight } from "@/components/logistics/ExtraPanels";
+import { AnimalBottom, AnimalLeft, AnimalRight, ConsBottom, ConsLeft, ConsRight, DataBottom, DataLeft, DataRight, GridBottom, GridLeft, GridRight, MaterialBottom, MaterialLeft, MaterialRight, StackBottom, WasteBottom, WasteLeft, WasteRight } from "@/components/logistics/ExtraPanels";
 
 const MODES = [
   { id: "history", label: "History", color: "#c4a574" },
@@ -21,6 +20,7 @@ const MODES = [
   { id: "waste", label: "Waste", color: "#c46a58" },
   { id: "animal", label: "Animals", color: "#a394c9" },
   { id: "data", label: "Data", color: "#8aa0ae" },
+  { id: "cons", label: "Cons", color: "#a394c9" },
 ] as const;
 
 const KICKER: Record<(typeof MODES)[number]["id"], string> = {
@@ -31,13 +31,43 @@ const KICKER: Record<(typeof MODES)[number]["id"], string> = {
   waste: "Waste",
   animal: "Animals",
   data: "Data",
+  cons: "ConsMAP",
 };
+
+const HOUSE = [
+  {
+    id: "earth",
+    chip: "Earth",
+    title: "AERA",
+    line: "The globe is one room. History and flow live here. The house stays outside.",
+  },
+  {
+    id: "stories",
+    chip: "Stories",
+    title: "Parables",
+    line: "Factory, the bus, the tablets.",
+    href: "https://sabaftw.github.io/ConsMAP/pravljica/index.html",
+  },
+  {
+    id: "zala",
+    chip: "Zala",
+    title: "Third pillar",
+    line: "Verify, not believe. The witness stayed.",
+    href: "https://sabaftw.github.io/ConsMAP/zalasite/zala.html",
+  },
+  {
+    id: "library",
+    chip: "Library",
+    title: "Reading room",
+    line: "Protocols and the archive. A claim still shows its work.",
+    href: "https://sabaftw.github.io/ConsMAP/",
+  },
+] as const;
 
 export function AppShell() {
   const year = useTimeline((state) => state.year);
   const selectedId = useTimeline((state) => state.selectedId);
   const custom = useTimeline((state) => state.custom);
-  const checked = useTimeline((state) => state.checked);
   const panels = useTimeline((state) => state.panels);
   const pinArmed = useTimeline((state) => state.pinArmed);
   const select = useTimeline((state) => state.select);
@@ -55,8 +85,6 @@ export function AppShell() {
   const [entered, setEntered] = useState(false);
 
   const selected = findEvent(custom, selectedId);
-  const active = allEvents(custom).filter((event) => isChecked(checked, event.id));
-  const line = meanwhile(year, active, selected);
   const era = year < 0 ? "BC" : year === 0 ? "BC · AD" : "AD";
   const spoken = year === 0 ? "year 0" : year < 0 ? `${Math.abs(year)} BC` : `${year} AD`;
   const live = MODES.filter((item) => item.id !== "history" && layers[item.id as LayerId]);
@@ -130,22 +158,28 @@ export function AppShell() {
 
       {!entered ? (
         <section className="gate">
-          <div className="gate-card">
-            <p className="kicker">Before the earth</p>
-            <h1 className="wordmark mt-3">AERA</h1>
-            <p className="lede mx-auto mt-6 max-w-xl font-display text-2xl italic leading-snug text-fg/95">{line.body}</p>
-            <p className="mx-auto mt-4 max-w-md text-sm text-muted">{line.kicker}</p>
-            <ul className="mx-auto mt-8 max-w-md space-y-2 text-left text-sm text-muted">
-              <li>Flow keeps one current toward the sun. Cargo also ends in Asia, Africa and the Americas.</li>
-              <li>Grid paints a halo: mint is spare, gold is even, red is hungry.</li>
-              <li>Raw is the rest. Forest to planks, mine to bars, sand to bags.</li>
-              <li>Waste stays in the city. Food is the largest thing a household throws away.</li>
-              <li>Animals move as meat and fish. China eats its own pigs.</li>
-              <li>Data stays in the building. Only the light in the glass moves.</li>
-            </ul>
-            <button type="button" className="gate-enter" onClick={() => setEntered(true)}>
-              Open the earth
-            </button>
+          <div className="gate-card house-card">
+            <p className="kicker">Claim hygiene · symbolic boundary</p>
+            <h1 className="wordmark mt-3">ConsMAP</h1>
+            <p className="lede mx-auto mt-5 max-w-xl font-display text-2xl italic leading-snug">Signal goes forward.</p>
+            <p className="mx-auto mt-3 max-w-md text-sm text-muted">The house is the system. The globe is only the Earth room.</p>
+            <div className="house-grid">
+              {HOUSE.map((room) =>
+                "href" in room ? (
+                  <a key={room.id} className="house-room" href={room.href}>
+                    <span className="kicker">{room.chip}</span>
+                    <span className="house-title">{room.title}</span>
+                    <span className="text-xs text-muted">{room.line}</span>
+                  </a>
+                ) : (
+                  <button key={room.id} type="button" className="house-room house-earth" onClick={() => setEntered(true)}>
+                    <span className="kicker">{room.chip}</span>
+                    <span className="house-title">{room.title}</span>
+                    <span className="text-xs text-muted">{room.line}</span>
+                  </button>
+                ),
+              )}
+            </div>
           </div>
         </section>
       ) : null}
@@ -154,6 +188,9 @@ export function AppShell() {
         <p className="kicker">
           {kicker}
         </p>
+        <button type="button" className="house-back pointer-events-auto" onClick={() => setEntered(false)}>
+          House
+        </button>
         <h1 className="mt-1">
           <button type="button" className="wordmark pointer-events-auto" aria-expanded={tabsOn} onClick={() => setTabsOn(!tabsOn)}>
             AERA
@@ -267,6 +304,12 @@ export function AppShell() {
           <DataRight arriving={arriving} />
           {stacked ? <StackBottom arriving={arriving} /> : <DataBottom arriving={arriving} />}
         </>
+      ) : entered && mode === "cons" ? (
+        <>
+          <ConsLeft arriving={arriving} />
+          <ConsRight arriving={arriving} />
+          {stacked ? <StackBottom arriving={arriving} /> : <ConsBottom arriving={arriving} />}
+        </>
       ) : (
         <>
           <PlanPanel arriving={arriving} />
@@ -282,7 +325,7 @@ export function AppShell() {
           onClick={() => togglePanel("left")}
         >
           <PanelLeft className="size-4" />
-          {mode === "history" ? "Ledger" : mode === "grid" ? "Plants" : mode === "materials" ? "Raw" : mode === "waste" ? "Bins" : mode === "animal" ? "Herds" : mode === "data" ? "Halls" : "Plan"}
+          {mode === "history" ? "Ledger" : mode === "grid" ? "Plants" : mode === "materials" ? "Raw" : mode === "waste" ? "Bins" : mode === "animal" ? "Herds" : mode === "data" ? "Halls" : mode === "cons" ? "Lore" : "Plan"}
         </button>
       ) : null}
       {entered && !panels.right ? (
@@ -291,7 +334,7 @@ export function AppShell() {
           className="glass edge-right absolute top-1/2 right-3 z-30 flex h-11 items-center gap-2 px-3 text-sm"
           onClick={() => togglePanel("right")}
         >
-          {mode === "history" ? "Years" : mode === "grid" ? "Load" : mode === "materials" ? "Places" : mode === "waste" ? "Cities" : mode === "animal" ? "Places" : mode === "data" ? "Rooms" : "Stocks"}
+          {mode === "history" ? "Years" : mode === "grid" ? "Load" : mode === "materials" ? "Places" : mode === "waste" ? "Cities" : mode === "animal" ? "Places" : mode === "data" ? "Rooms" : mode === "cons" ? "Labels" : "Stocks"}
           <PanelRight className="size-4" />
         </button>
       ) : null}
@@ -302,7 +345,7 @@ export function AppShell() {
           onClick={() => togglePanel("bottom")}
         >
           <PanelBottom className="size-4" />
-          {mode === "history" ? "Span" : stacked ? "Stack" : mode === "grid" ? "Cables" : mode === "materials" ? "Chains" : mode === "waste" ? "Moved" : mode === "animal" ? "Lanes" : mode === "data" ? "Glass" : "Flow"}
+          {mode === "history" ? "Span" : stacked ? "Stack" : mode === "grid" ? "Cables" : mode === "materials" ? "Chains" : mode === "waste" ? "Moved" : mode === "animal" ? "Lanes" : mode === "data" ? "Glass" : mode === "cons" ? "Seal" : "Flow"}
         </button>
       ) : null}
     </div>

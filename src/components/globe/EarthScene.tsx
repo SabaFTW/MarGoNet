@@ -8,6 +8,7 @@ import { BRASS_HEX, CATEGORY_HEX } from "@/lib/timeline/palette";
 import { useTimeline } from "@/lib/timeline/store";
 import { useLogistics } from "@/lib/logistics/store";
 import { AnimalNet, ChainsNet, DataNet, GridNet, LogisticsNet, WasteNet } from "@/components/globe/LogisticsNet";
+import { ConsNet } from "@/components/globe/ConsNet";
 import type { Reach, TimelineEvent } from "@/lib/timeline/types";
 
 const SUN = new THREE.Vector3(4.2, 1.55, -1.35).normalize();
@@ -604,6 +605,7 @@ function SceneContents() {
           {layers.waste ? <WasteNet /> : null}
           {layers.animal ? <AnimalNet /> : null}
           {layers.data ? <DataNet /> : null}
+          {layers.cons ? <ConsNet /> : null}
         </>
       )}
       <OrbitControls

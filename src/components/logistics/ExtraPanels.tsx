@@ -5,6 +5,7 @@ import { CHAINS, PLANTS, WIRES, arrivingGw, hungerColor } from "@/lib/logistics/
 import { ROUTES } from "@/lib/logistics/data";
 import { ANIMAL_KINDS, ANIMAL_LANES, BINS, HERDS, WASTE_KINDS, WASTE_LANES, animalColor } from "@/lib/logistics/life";
 import { GLASS, HALLS, glassColor, glassSystems } from "@/lib/logistics/net";
+import { LABELS, RIVERS, SEAL, SEATS } from "@/lib/logistics/cons";
 import { useLogistics, type LayerId } from "@/lib/logistics/store";
 import { useTimeline } from "@/lib/timeline/store";
 
@@ -352,6 +353,67 @@ export function DataBottom({ arriving = false }: { arriving?: boolean }) {
   );
 }
 
+export function ConsLeft({ arriving = false }: { arriving?: boolean }) {
+  const selectedId = useLogistics((state) => state.selectedId);
+  const selectNode = useLogistics((state) => state.selectNode);
+  return (
+    <Shell side="left" kicker="ConsMAP" title="Lore" arriving={arriving}>
+      <p className="px-4 pb-2 text-sm text-muted">Folded in from the reading room. A picture is not a place, and a method is not a cause.</p>
+      <ul className="scroll-thin min-h-0 flex-1 space-y-1 overflow-y-auto px-3 pb-3">
+        {SEATS.map((seat) => (
+          <li key={seat.id}>
+            <button type="button" className={`desk-row ${selectedId === seat.id ? "stock-on" : ""}`} onClick={() => selectNode(selectedId === seat.id ? null : seat.id)}>
+              <span className="size-2 shrink-0 rounded-full" style={{ background: seat.color }} />
+              <span className="min-w-0 text-left">
+                <span className="block text-sm font-medium">{seat.label}</span>
+                <span className="block text-xs text-muted">{seat.tag} · {seat.line}</span>
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </Shell>
+  );
+}
+
+export function ConsRight({ arriving = false }: { arriving?: boolean }) {
+  return (
+    <Shell side="right" kicker="What a claim wears" title="Labels" arriving={arriving}>
+      <ul className="scroll-thin min-h-0 flex-1 space-y-3 overflow-y-auto px-4 pb-4">
+        {LABELS.map((label) => (
+          <li key={label.id}>
+            <p className="text-sm font-medium">{label.id}</p>
+            <p className="mt-1 text-xs text-muted">{label.line}</p>
+          </li>
+        ))}
+      </ul>
+    </Shell>
+  );
+}
+
+export function ConsBottom({ arriving = false }: { arriving?: boolean }) {
+  const selectedId = useLogistics((state) => state.selectedId);
+  const selectNode = useLogistics((state) => state.selectNode);
+  return (
+    <Shell side="bottom" kicker="Satire above. Ledger below." title="Seal" arriving={arriving}>
+      <p className="px-4 pb-2 text-sm text-muted">{SEAL}</p>
+      <ul className="scroll-thin min-h-0 flex-1 space-y-1 overflow-y-auto px-3 pb-3">
+        {RIVERS.map((river) => (
+          <li key={river.id}>
+            <button type="button" className={`desk-row ${selectedId === river.id ? "stock-on" : ""}`} onClick={() => selectNode(selectedId === river.id ? null : river.id)}>
+              <span className="size-2 shrink-0 rounded-full" style={{ background: river.color }} />
+              <span className="min-w-0 text-left">
+                <span className="block text-sm font-medium">{river.label}</span>
+                <span className="block text-xs text-muted">{river.tag} · {river.line}</span>
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </Shell>
+  );
+}
+
 const STACK: { id: LayerId; label: string; color: string; fact: string; note: string }[] = [
   { id: "logistics", label: "Flow", color: "#d4a35c", fact: `${ROUTES.length} cargo lanes`, note: "Ships are slow. The sun ring is the one current that does not pick a port." },
   { id: "grid", label: "Grid", color: "#6aafa6", fact: `${PLANTS.filter((plant) => plant.role === "plant").length} plants · ${WIRES.length} lines`, note: "Power leaves in one direction and thins out. A city far from the plant is hungrier." },
@@ -359,6 +421,7 @@ const STACK: { id: LayerId; label: string; color: string; fact: string; note: st
   { id: "waste", label: "Waste", color: "#c46a58", fact: `${BINS.length} cities · ${WASTE_LANES.length} scrap lanes`, note: "About a billion tonnes of food a year. Most of it never leaves the city." },
   { id: "animal", label: "Animals", color: "#a394c9", fact: `${HERDS.length} herds · ${ANIMAL_LANES.length} lanes`, note: "Meat and fish. A lot of it is eaten close to where it was raised." },
   { id: "data", label: "Data", color: "#8aa0ae", fact: `${glassSystems(GLASS.filter((cable) => cable.kind === "ocean")).length} ocean cables · ${HALLS.filter((hall) => hall.role !== "landing").length} rooms`, note: "The halls stay. Light in the glass crosses the Atlantic in about 60 ms, there and back." },
+  { id: "cons", label: "Cons", color: "#a394c9", fact: `${SEATS.length} seats · ${RIVERS.length} rivers`, note: "A claim shows its work. Myth stays labeled. The mouse only flies on a real protocol." },
 ];
 
 export function StackBottom({ arriving = false }: { arriving?: boolean }) {

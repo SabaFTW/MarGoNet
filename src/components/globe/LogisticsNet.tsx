@@ -196,7 +196,7 @@ function ribbonGeometry(points: THREE.Vector3[], width: number) {
   return geo;
 }
 
-function Ribbon({
+export function Ribbon({
   points,
   color,
   colorB,

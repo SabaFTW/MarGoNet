@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { COMMODITIES, MESHES, NODES, nearestJoin, resolveRoutes, type Commodity, type MeshKind, type StockKey, type SupplyNode, type SupplyRoute, type Split } from "./data";
 
-export type AppMode = "history" | "logistics" | "grid" | "materials" | "waste" | "animal" | "data";
+export type AppMode = "history" | "logistics" | "grid" | "materials" | "waste" | "animal" | "data" | "cons";
 export type LayerId = Exclude<AppMode, "history">;
 
 const layersOff = (): Record<LayerId, boolean> => ({
@@ -12,6 +12,7 @@ const layersOff = (): Record<LayerId, boolean> => ({
   waste: false,
   animal: false,
   data: false,
+  cons: false,
 });
 
 type ExtraStep = { id: string; title: string; body: string };
