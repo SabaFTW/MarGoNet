@@ -47,7 +47,7 @@ export function PlanPanel({ arriving = false }: { arriving?: boolean }) {
     >
       <div className="flex items-center justify-between px-4 pt-4 pb-2">
         <div>
-          <p className="kicker">Togo supply</p>
+          <p className="kicker">Flow</p>
           <h2 className="font-display text-3xl leading-none">Plan</h2>
         </div>
         <button type="button" className="grid size-11 place-items-center text-muted" aria-label="Hide plan" onClick={() => togglePanel("left")}>

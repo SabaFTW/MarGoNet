@@ -1,13 +1,13 @@
 import { Html, OrbitControls, useTexture } from "@react-three/drei";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Suspense, useEffect, useMemo, useRef, type RefObject } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import * as THREE from "three";
 import { allEvents, findEvent, isChecked } from "@/lib/timeline/events";
 import { latLonToXYZ, calmZoom, xyzToLatLon } from "@/lib/timeline/geo";
 import { BRASS_HEX, CATEGORY_HEX } from "@/lib/timeline/palette";
 import { useTimeline } from "@/lib/timeline/store";
 import { useLogistics } from "@/lib/logistics/store";
-import { ChainsNet, GridNet, LogisticsNet } from "@/components/globe/LogisticsNet";
+import { AnimalNet, ChainsNet, DataNet, GridNet, LogisticsNet, WasteNet } from "@/components/globe/LogisticsNet";
 import type { Reach, TimelineEvent } from "@/lib/timeline/types";
 
 const SUN = new THREE.Vector3(4.2, 1.55, -1.35).normalize();
@@ -47,13 +47,13 @@ const earthFrag = /* glsl */ `
     vec3 day = sRGBTransferEOTF(vec4(texture2D(dayMap, vUv).rgb, 1.0)).rgb;
     vec3 night = sRGBTransferEOTF(vec4(texture2D(nightMap, vUv).rgb, 1.0)).rgb;
     float luma = dot(day, vec3(0.299, 0.587, 0.114));
-    day = mix(vec3(luma), day, 1.22);
-    day = pow(max(day, 0.0), vec3(1.12));
-    vec3 blow = max(day - vec3(0.62), 0.0);
-    day = clamp(day - blow * 0.62, 0.0, 1.0);
-    day *= vec3(1.06, 0.93, 0.8);
-    float ocean = smoothstep(0.02, 0.2, day.b - day.r);
-    day = mix(day, day * vec3(0.42, 0.58, 0.55), ocean * 0.5);
+    day = mix(vec3(luma), day, 1.38);
+    day = pow(max(day, 0.0), vec3(0.94));
+    vec3 blow = max(day - vec3(0.78), 0.0);
+    day = clamp(day - blow * 0.45, 0.0, 1.0);
+    day *= vec3(1.02, 0.99, 0.94);
+    float ocean = smoothstep(0.02, 0.22, day.b - day.r);
+    day = mix(day, day * vec3(0.22, 0.42, 0.62), ocean * 0.62);
     float hx = texture2D(heightMap, vUv + vec2(0.0016, 0.0)).r;
     float hy = texture2D(heightMap, vUv + vec2(0.0, 0.0016)).r;
     vec3 n = normalize(vNormalW);
@@ -67,7 +67,9 @@ const earthFrag = /* glsl */ `
     vec3 viewDir = normalize(cameraPosition - vWorld);
     vec3 halfDir = normalize(normalize(sunDir) + viewDir);
     float spec = pow(max(dot(n, halfDir), 0.0), 64.0);
-    color += spec * ocean * dayMix * 0.14;
+    color += spec * ocean * dayMix * 0.1;
+    float sunset = smoothstep(0.22, 0.0, abs(ndl));
+    color += vec3(0.95, 0.46, 0.18) * sunset * dayMix * 0.28;
     float ridge = smoothstep(0.42, 0.88, vHeight) * uRelief * dayMix;
     color += vec3(0.11, 0.09, 0.07) * ridge;
     float shade = clamp(ndl, 0.0, 1.0);
@@ -100,7 +102,7 @@ const cloudFrag = /* glsl */ `
     float alpha = max(tex.a, tex.r);
     float ndl = dot(normalize(vNormalW), normalize(sunDir));
     float light = smoothstep(-0.15, 0.45, ndl);
-    gl_FragColor = vec4(vec3(0.78, 0.8, 0.82), alpha * (0.03 + 0.22 * light));
+    gl_FragColor = vec4(vec3(0.93, 0.91, 0.86), alpha * (0.02 + 0.14 * light));
     #include <colorspace_fragment>
   }
 `;
@@ -122,7 +124,7 @@ const atmosFrag = /* glsl */ `
   void main() {
     vec3 viewDir = normalize(cameraPosition - vWorld);
     float fres = pow(clamp(0.72 - dot(normalize(vNormalW), viewDir), 0.0, 1.0), 2.6);
-    gl_FragColor = vec4(vec3(0.55, 0.38, 0.24) * fres * 0.55, 1.0);
+    gl_FragColor = vec4(vec3(0.5, 0.7, 0.86) * fres, fres * 0.62);
     #include <colorspace_fragment>
   }
 `;
@@ -132,23 +134,6 @@ type ControlsLike = {
   autoRotateSpeed: number;
   update: () => void;
 };
-
-function makeGlowTexture() {
-  const canvas = document.createElement("canvas");
-  canvas.width = 64;
-  canvas.height = 64;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return new THREE.CanvasTexture(canvas);
-  const gradient = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-  gradient.addColorStop(0, "rgba(255,255,255,1)");
-  gradient.addColorStop(0.35, "rgba(255,255,255,0.55)");
-  gradient.addColorStop(1, "rgba(255,255,255,0)");
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, 64, 64);
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.NoColorSpace;
-  return texture;
-}
 
 function Stars() {
   const geometry = useMemo(() => {
@@ -356,16 +341,16 @@ function WorldHalo({ event, tilt, radius }: { event: TimelineEvent; tilt: number
   const material = useRef<THREE.MeshBasicMaterial>(null);
   useFrame(({ clock }) => {
     if (!material.current) return;
-    material.current.opacity = 0.72 + Math.sin(clock.elapsedTime * 1.3 + tilt) * 0.16;
+    material.current.opacity = 0.28 + Math.sin(clock.elapsedTime * 0.7 + tilt) * 0.06;
   });
   return (
     <mesh rotation={[Math.PI / 2.15 + tilt * 0.22, tilt * 0.4, tilt * 0.08]} raycast={() => undefined} renderOrder={3}>
-      <torusGeometry args={[radius, 0.02, 16, 128]} />
+      <torusGeometry args={[radius, 0.0045, 12, 160]} />
       <meshBasicMaterial
         ref={material}
         color={CATEGORY_HEX[event.category]}
         transparent
-        opacity={0.85}
+        opacity={0.34}
         toneMapped={false}
         blending={THREE.AdditiveBlending}
         depthWrite={false}
@@ -379,15 +364,13 @@ function Marker({
   event,
   active,
   selected,
-  glow,
 }: {
   event: TimelineEvent;
   active: boolean;
   selected: boolean;
-  glow: THREE.Texture;
 }) {
   const group = useRef<THREE.Group>(null);
-  const sprite = useRef<THREE.Sprite>(null);
+  const [hot, setHot] = useState(false);
   const world = useMemo(() => new THREE.Vector3(), []);
   const camDir = useMemo(() => new THREE.Vector3(), []);
   const position = useMemo(() => latLonToXYZ(event.lat, event.lon, 1.02), [event.lat, event.lon]);
@@ -396,40 +379,19 @@ function Marker({
     () => new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), outward),
     [outward],
   );
-  const phase = useMemo(() => {
-    let hash = 0;
-    for (const char of event.id) hash = (hash * 33 + char.charCodeAt(0)) % 997;
-    return (hash / 997) * Math.PI * 2;
-  }, [event.id]);
   const color = CATEGORY_HEX[event.category];
   const gl = useThree((state) => state.gl);
 
-  useFrame(({ camera, clock }) => {
+  useFrame(({ camera }) => {
     if (!group.current) return;
     group.current.getWorldPosition(world);
     camDir.copy(camera.position).normalize();
     group.current.visible = world.normalize().dot(camDir) > 0.12;
-    const zoom = calmZoom(camera.position.length()) * 0.72;
-    group.current.scale.setScalar(zoom);
-    if (!sprite.current) return;
-    const pulse = active ? 1 + Math.sin(clock.elapsedTime * 1.6 + phase) * 0.08 : 1;
-    const size = (selected ? 0.05 : active ? 0.04 : 0.03) * pulse;
-    sprite.current.scale.set(size, size, 1);
+    group.current.scale.setScalar(calmZoom(camera.position.length()) * (selected ? 1.15 : 1));
   });
 
   return (
     <group ref={group} position={position}>
-      <sprite ref={sprite}>
-        <spriteMaterial
-          map={glow}
-          color={color}
-          transparent
-          depthWrite={false}
-          blending={THREE.AdditiveBlending}
-          opacity={active ? 0.95 : 0.4}
-          toneMapped={false}
-        />
-      </sprite>
       <mesh
         onPointerDown={(pointer) => pointer.stopPropagation()}
         onClick={(pointer) => {
@@ -438,23 +400,31 @@ function Marker({
         }}
         onPointerOver={(pointer) => {
           pointer.stopPropagation();
+          setHot(true);
           gl.domElement.style.cursor = "pointer";
         }}
         onPointerOut={() => {
+          setHot(false);
           gl.domElement.style.cursor = "";
         }}
       >
-        <sphereGeometry args={[0.015, 12, 12]} />
-        <meshBasicMaterial color={color} toneMapped={false} />
+        <sphereGeometry args={[active ? 0.012 : 0.007, 16, 16]} />
+        <meshBasicMaterial color={color} transparent opacity={active ? 1 : 0.38} toneMapped={false} />
       </mesh>
-      {selected ? (
-        <mesh quaternion={quat} position={outward.clone().multiplyScalar(0.008)}>
-          <ringGeometry args={[0.018, 0.022, 32]} />
-          <meshBasicMaterial color={BRASS_HEX} side={THREE.DoubleSide} toneMapped={false} />
+      {active ? (
+        <mesh quaternion={quat}>
+          <ringGeometry args={[0.016, 0.019, 40]} />
+          <meshBasicMaterial color={color} side={THREE.DoubleSide} transparent opacity={0.9} toneMapped={false} />
         </mesh>
       ) : null}
       {selected ? (
-        <Html position={[0, 0.075, 0]} center distanceFactor={3.2} zIndexRange={[8, 0]} style={{ pointerEvents: "none" }}>
+        <mesh quaternion={quat}>
+          <ringGeometry args={[0.023, 0.026, 48]} />
+          <meshBasicMaterial color={BRASS_HEX} side={THREE.DoubleSide} toneMapped={false} />
+        </mesh>
+      ) : null}
+      {selected || hot ? (
+        <Html position={[0, 0.05, 0]} center distanceFactor={3.2} zIndexRange={[8, 0]} style={{ pointerEvents: "none" }}>
           <div className="marker-label">{event.title}</div>
         </Html>
       ) : null}
@@ -462,7 +432,7 @@ function Marker({
   );
 }
 
-function Markers({ glow }: { glow: THREE.Texture }) {
+function Markers() {
   const year = useTimeline((state) => state.year);
   const checked = useTimeline((state) => state.checked);
   const custom = useTimeline((state) => state.custom);
@@ -487,10 +457,10 @@ function Markers({ glow }: { glow: THREE.Texture }) {
                 event={item}
                 geometry={reach === "region" ? regionGeo : placeGeo}
                 angle={REACH_ANGLE[reach]}
-                strength={item.id === selectedId ? 0.72 : 0.5}
+                strength={item.id === selectedId ? 0.34 : 0.18}
               />
             ) : null}
-            <Marker event={item} active={active} selected={item.id === selectedId} glow={glow} />
+            <Marker event={item} active={active} selected={item.id === selectedId} />
           </group>
         );
       })}
@@ -585,7 +555,6 @@ function FlyRig({
 
 function SceneContents() {
   const [day, night, clouds, topo] = useTexture(["/earth/day.jpg", "/earth/night.png", "/earth/clouds.png", "/earth/topo.png"]);
-  const glow = useMemo(() => makeGlowTexture(), []);
   const controlsRef = useRef<ControlsLike | null>(null);
   const flying = useRef(false);
   const paused = useRef(false);
@@ -603,15 +572,27 @@ function SceneContents() {
     }
   }, [clouds, day, gl, night, topo]);
 
-  useEffect(() => () => glow.dispose(), [glow]);
-
   return (
     <>
       <Stars />
       <Earth day={day} night={night} topo={topo} />
       <Clouds map={clouds} />
       <Atmosphere />
-      {mode === "history" ? <Markers glow={glow} /> : mode === "grid" ? <GridNet /> : mode === "materials" ? <ChainsNet /> : <LogisticsNet />}
+      {mode === "history" ? (
+        <Markers />
+      ) : mode === "grid" ? (
+        <GridNet />
+      ) : mode === "materials" ? (
+        <ChainsNet />
+      ) : mode === "waste" ? (
+        <WasteNet />
+      ) : mode === "animal" ? (
+        <AnimalNet />
+      ) : mode === "data" ? (
+        <DataNet />
+      ) : (
+        <LogisticsNet />
+      )}
       <OrbitControls
         ref={controlsRef as never}
         enablePan={false}

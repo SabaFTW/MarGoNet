@@ -2,8 +2,8 @@ import { Html } from "@react-three/drei";
 import { useFrame } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
 import * as THREE from "three";
-import { calmZoom, latLonToXYZ, ribbonZoom } from "@/lib/timeline/geo";
-import { CABLES, CHAINS, PLANTS, type Plant } from "@/lib/logistics/chains";
+import { calmZoom, latLonToXYZ } from "@/lib/timeline/geo";
+import { CHAINS, PLANTS, WIRES, arrivingGw, hungerColor, type Plant } from "@/lib/logistics/chains";
 import {
   MESH_LINKS,
   NODES,
@@ -17,6 +17,8 @@ import {
   type SupplyNode,
 } from "@/lib/logistics/data";
 import { useLogistics } from "@/lib/logistics/store";
+import { ANIMAL_LANES, BINS, HERDS, WASTE_LANES, WASTE_PORTS, animalColor, wasteColor } from "@/lib/logistics/life";
+import { GLASS, HALLS, glassColor } from "@/lib/logistics/net";
 
 const SUN = new THREE.Vector3(4.2, 1.55, -1.35).normalize();
 
@@ -86,29 +88,36 @@ const ribbonFrag = /* glsl */ `
   uniform float uGain;
   uniform float uWidth;
   uniform float uFlow;
+  uniform float uFade;
   uniform float uSpan;
   void main() {
     float across = abs(vAcross);
-    float road = smoothstep(1.0, 0.38, across);
-    vec3 dye = mix(uColor, uColorB, clamp(vAlong / max(uSpan, 0.0001), 0.0, 1.0));
+    float travel = clamp(vAlong / max(uSpan, 0.0001), 0.0, 1.0);
+    float fall = smoothstep(0.05, 0.9, vAlong);
+    float fade = mix(1.0, mix(1.0, 0.14, fall * fall), step(0.5, uFade));
+    float reach = mix(1.0, mix(1.0, 0.4, fall), step(0.5, uFade));
+    float road = smoothstep(reach, reach * 0.32, across);
+    vec3 dye = mix(uColor, uColorB, travel);
     if (uFlow < 0.5) {
-      if (road * uGain < 0.04) discard;
-      gl_FragColor = vec4(dye, road * uGain);
+      if (road * uGain * fade < 0.04) discard;
+      gl_FragColor = vec4(dye, road * uGain * fade);
       #include <colorspace_fragment>
       return;
     }
-    float x = fract(vAlong * 6.5 - uTime * uSpeed);
-    float wing = mix(0.48, 0.0, smoothstep(0.02, 0.46, x));
+    float freq = mix(6.5, mix(6.5, 1.7, fall), step(0.5, uFade));
+    float x = fract(vAlong * freq - uTime * uSpeed);
+    float wing = mix(0.48, 0.0, smoothstep(0.02, 0.46, x)) * reach;
     float arrow = smoothstep(wing + 0.12, wing, across) * smoothstep(0.52, 0.2, x);
     float tip = smoothstep(0.42, 0.05, x) * arrow;
     vec3 col = mix(dye * 0.78, vec3(0.98, 0.95, 0.88), tip);
-    float alpha = max(road * 0.7, arrow * 0.95) * uGain;
+    float alpha = max(road * 0.55, arrow * 0.95) * uGain * fade;
     if (alpha < 0.04) discard;
     gl_FragColor = vec4(col, alpha);
     #include <colorspace_fragment>
   }
 `;
 
+const MARK = 0.0084;
 const LIFT: Record<string, number> = { food: 1.014, auto: 1.021, meds: 1.028, fabric: 1.035 };
 
 function ribbonGeometry(points: THREE.Vector3[], width: number) {
@@ -159,6 +168,7 @@ function Ribbon({
   speed,
   gain,
   flow = true,
+  fade = false,
 }: {
   points: THREE.Vector3[];
   color: string;
@@ -167,6 +177,7 @@ function Ribbon({
   speed: number;
   gain: number;
   flow?: boolean;
+  fade?: boolean;
 }) {
   const material = useRef<THREE.ShaderMaterial>(null);
   const reduced = useRef(typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
@@ -185,13 +196,14 @@ function Ribbon({
       uGain: { value: gain },
       uWidth: { value: 0.2 },
       uFlow: { value: flow ? 1 : 0 },
+      uFade: { value: fade ? 1 : 0 },
       uSpan: { value: span },
     }),
-    [color, colorB, flow, gain, span, speed],
+    [color, colorB, fade, flow, gain, span, speed],
   );
   useFrame(({ clock, camera }) => {
     if (!material.current) return;
-    material.current.uniforms.uWidth.value = ribbonZoom(camera.position.length());
+    material.current.uniforms.uWidth.value = calmZoom(camera.position.length());
     if (reduced.current) return;
     material.current.uniforms.uTime.value = clock.elapsedTime;
   });
@@ -226,7 +238,7 @@ function Arrows({ points, color, speed, closed }: { points: THREE.Vector3[]; col
   useFrame(({ clock, camera }) => {
     const current = mesh.current;
     if (!current) return;
-    const zoom = ribbonZoom(camera.position.length());
+    const zoom = calmZoom(camera.position.length()) * 0.22;
     const head = (clock.elapsedTime * speed) % 1;
     for (let i = 0; i < count; i += 1) {
       const t = (head + i / count) % 1;
@@ -284,7 +296,7 @@ function NodeMark({ node, on }: { node: SupplyNode; on: boolean }) {
           selectNode(selected ? null : node.id);
         }}
       >
-        <sphereGeometry args={[selected ? 0.02 : 0.012, 14, 14]} />
+        <sphereGeometry args={[0.012, 14, 14]} />
         <meshBasicMaterial color={colors[0]} toneMapped={false} />
       </mesh>
       <group quaternion={quat}>
@@ -427,14 +439,14 @@ export function LogisticsNet() {
 
   return (
     <group>
-      <Ribbon points={sun} color="#e6c36a" width={0.04} speed={1.1} gain={0.75} />
+      <Ribbon points={sun} color="#e6c36a" width={MARK} speed={1.1} gain={0.75} />
       <Arrows points={sun.slice(0, -1)} color="#f3e6c8" speed={0.04} closed />
       {meshes.map((link) => (
-        <Ribbon key={link.id} points={link.points} color={link.color} width={0.01} speed={0} gain={0.38} flow={false} />
+        <Ribbon key={link.id} points={link.points} color={link.color} width={MARK} speed={0} gain={0.38} flow={false} />
       ))}
       {arcs.map((arc) => (
         <group key={arc.id}>
-          <Ribbon points={arc.points} color={arc.color} width={0.04} speed={arc.speed * 18} gain={arc.gain} />
+          <Ribbon points={arc.points} color={arc.color} width={MARK} speed={arc.speed * 18} gain={arc.gain} />
           <Arrows points={arc.points} color="#f4efe4" speed={arc.speed} closed={false} />
         </group>
       ))}
@@ -458,10 +470,8 @@ export function LogisticsNet() {
 }
 
 function plantTone(plant: Plant) {
-  const ratio = plant.load / Math.max(plant.gw, 0.2);
-  if (ratio < 0.75) return "#7ddec4";
-  if (ratio < 1.05) return "#e6c36a";
-  return "#d4534a";
+  if (plant.role === "city") return hungerColor(plant.load, arrivingGw(plant.id));
+  return "#7ddec4";
 }
 
 export function GridNet() {
@@ -469,29 +479,80 @@ export function GridNet() {
   const selectedId = useLogistics((state) => state.selectedId);
   const cables = useMemo(
     () =>
-      CABLES.flatMap(([fromId, toId]) => {
-        const from = PLANTS.find((plant) => plant.id === fromId);
-        const to = PLANTS.find((plant) => plant.id === toId);
+      WIRES.flatMap((wire) => {
+        const from = PLANTS.find((plant) => plant.id === wire.from);
+        const to = PLANTS.find((plant) => plant.id === wire.to);
         if (!from || !to) return [];
         return [
           {
-            id: `${fromId}-${toId}`,
+            id: wire.id,
             points: arcBetween(from.lat, from.lon, to.lat, to.lon, 1.012),
-            color: plantTone(from),
-            colorB: plantTone(to),
+            color: "#7ddec4",
+            colorB: hungerColor(to.load, wire.gw),
+            speed: 0.22 + wire.gw / 10,
           },
         ];
       }),
     [],
   );
+  const plants = PLANTS.filter((node) => node.role === "plant");
+  const cities = PLANTS.filter((node) => node.role === "city");
   return (
     <group>
       {cables.map((cable) => (
-        <Ribbon key={cable.id} points={cable.points} color={cable.color} colorB={cable.colorB} width={0.02} speed={0} gain={0.8} flow={false} />
+        <Ribbon
+          key={cable.id}
+          points={cable.points}
+          color={cable.color}
+          colorB={cable.colorB}
+          width={MARK}
+          speed={cable.speed}
+          gain={1}
+          fade
+        />
       ))}
-      {PLANTS.map((plant) => (
+      {plants.map((plant) => (
         <PlantMark key={plant.id} plant={plant} selected={selectedId === plant.id} onSelect={() => selectNode(selectedId === plant.id ? null : plant.id)} />
       ))}
+      {cities.map((city) => (
+        <CityHouse key={city.id} city={city} selected={selectedId === city.id} onSelect={() => selectNode(selectedId === city.id ? null : city.id)} />
+      ))}
+    </group>
+  );
+}
+
+function CityHouse({ city, selected, onSelect }: { city: Plant; selected: boolean; onSelect: () => void }) {
+  const group = useRef<THREE.Group>(null);
+  const position = useMemo(() => latLonToXYZ(city.lat, city.lon, 1.02), [city.lat, city.lon]);
+  const outward = useMemo(() => new THREE.Vector3(...position).normalize(), [position]);
+  const quat = useMemo(() => new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), outward), [outward]);
+  const color = hungerColor(city.load, arrivingGw(city.id));
+  useFrame(({ camera }) => {
+    group.current?.scale.setScalar(calmZoom(camera.position.length()) * (selected ? 1.2 : 1));
+  });
+  return (
+    <group ref={group} position={position} quaternion={quat}>
+      <mesh
+        position={[0, 0.012, 0]}
+        onClick={(event) => {
+          event.stopPropagation();
+          onSelect();
+        }}
+      >
+        <boxGeometry args={[0.02, 0.015, 0.016]} />
+        <meshBasicMaterial color={color} toneMapped={false} />
+      </mesh>
+      <mesh position={[0, 0.023, 0]} rotation={[0, Math.PI / 4, 0]} raycast={() => undefined}>
+        <coneGeometry args={[0.016, 0.012, 4]} />
+        <meshBasicMaterial color={color} toneMapped={false} />
+      </mesh>
+      {selected ? (
+        <Html position={[0, 0.05, 0]} center distanceFactor={3.2} zIndexRange={[8, 0]} style={{ pointerEvents: "none" }}>
+          <div className="marker-label">
+            {city.name} · {city.load} GW
+          </div>
+        </Html>
+      ) : null}
     </group>
   );
 }
@@ -518,7 +579,7 @@ function PlantMark({ plant, selected, onSelect }: { plant: Plant; selected: bool
           onSelect();
         }}
       >
-        <sphereGeometry args={[selected ? 0.016 : 0.01, 12, 12]} />
+        <sphereGeometry args={[0.0084, 12, 12]} />
         <meshBasicMaterial color={color} toneMapped={false} />
       </mesh>
       {selected ? (
@@ -550,7 +611,7 @@ export function ChainsNet() {
     <group>
       {arcs.map((arc) => (
         <group key={arc.id}>
-          <Ribbon points={arc.points} color={arc.color} width={0.022} speed={0.35} gain={0.85} />
+          <Ribbon points={arc.points} color={arc.color} width={MARK} speed={0.35} gain={0.85} />
           <Arrows points={arc.points} color="#f4efe4" speed={0.12} closed={false} />
         </group>
       ))}
@@ -598,6 +659,224 @@ function ChainHouse({
       {selected ? (
         <Html position={[0, 0.05, 0]} center distanceFactor={3.2} zIndexRange={[8, 0]} style={{ pointerEvents: "none" }}>
           <div className="marker-label">{place.name}</div>
+        </Html>
+      ) : null}
+    </group>
+  );
+}
+
+function foodColor(share: number) {
+  if (share < 0.3) return "#e6c36a";
+  if (share < 0.45) return "#e08a3c";
+  return "#d4534a";
+}
+
+export function WasteNet() {
+  const selectNode = useLogistics((state) => state.selectNode);
+  const selectedId = useLogistics((state) => state.selectedId);
+  const places = [...BINS, ...WASTE_PORTS];
+  const lanes = useMemo(
+    () =>
+      WASTE_LANES.flatMap((lane) => {
+        const from = places.find((place) => place.id === lane.from);
+        const to = places.find((place) => place.id === lane.to);
+        if (!from || !to) return [];
+        return [{ id: lane.id, color: wasteColor(lane.kind), points: arcBetween(from.lat, from.lon, to.lat, to.lon, 1.014) }];
+      }),
+    [],
+  );
+  return (
+    <group>
+      {lanes.map((lane) => (
+        <Ribbon key={lane.id} points={lane.points} color={lane.color} width={MARK} speed={0.28} gain={0.9} fade />
+      ))}
+      {places.map((place) => (
+        <LifeMark
+          key={place.id}
+          name={place.kg ? `${place.name} · ${Math.round(place.food * 100)}% food` : place.name}
+          lat={place.lat}
+          lon={place.lon}
+          color={place.kg ? foodColor(place.food) : "#9aa7b2"}
+          house={place.kg > 0}
+          selected={selectedId === place.id}
+          onSelect={() => selectNode(selectedId === place.id ? null : place.id)}
+        />
+      ))}
+    </group>
+  );
+}
+
+export function AnimalNet() {
+  const selectNode = useLogistics((state) => state.selectNode);
+  const selectedId = useLogistics((state) => state.selectedId);
+  const lanes = useMemo(
+    () =>
+      ANIMAL_LANES.flatMap((lane) => {
+        const from = HERDS.find((herd) => herd.id === lane.from);
+        const to = HERDS.find((herd) => herd.id === lane.to);
+        if (!from || !to) return [];
+        return [{ id: lane.id, color: animalColor(lane.kind), points: arcBetween(from.lat, from.lon, to.lat, to.lon, 1.016) }];
+      }),
+    [],
+  );
+  return (
+    <group>
+      {lanes.map((lane) => (
+        <Ribbon key={lane.id} points={lane.points} color={lane.color} width={MARK} speed={0.32} gain={0.9} fade />
+      ))}
+      {HERDS.map((herd) => (
+        <LifeMark
+          key={herd.id}
+          name={herd.name}
+          lat={herd.lat}
+          lon={herd.lon}
+          color={ANIMAL_LANES.filter((lane) => lane.to === herd.id).length > 1 ? "#c4a574" : animalColor(herd.kind)}
+          house={herd.role === "sink"}
+          selected={selectedId === herd.id}
+          onSelect={() => selectNode(selectedId === herd.id ? null : herd.id)}
+        />
+      ))}
+    </group>
+  );
+}
+
+function LifeMark({
+  name,
+  lat,
+  lon,
+  color,
+  house,
+  selected,
+  onSelect,
+}: {
+  name: string;
+  lat: number;
+  lon: number;
+  color: string;
+  house: boolean;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const group = useRef<THREE.Group>(null);
+  const position = useMemo(() => latLonToXYZ(lat, lon, house ? 1.02 : 1.03), [house, lat, lon]);
+  const outward = useMemo(() => new THREE.Vector3(...position).normalize(), [position]);
+  const up = house ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(0, 0, 1);
+  const quat = useMemo(() => new THREE.Quaternion().setFromUnitVectors(up, outward), [outward, up]);
+  useFrame(({ camera }) => {
+    group.current?.scale.setScalar(calmZoom(camera.position.length()) * (selected ? 1.15 : 1) * 0.85);
+  });
+  return (
+    <group ref={group} position={position} quaternion={quat}>
+      <mesh
+        position={house ? [0, 0.01, 0] : [0, 0, 0]}
+        onClick={(event) => {
+          event.stopPropagation();
+          onSelect();
+        }}
+      >
+        {house ? <boxGeometry args={[0.02, 0.014, 0.016]} /> : <sphereGeometry args={[0.008, 12, 12]} />}
+        <meshBasicMaterial color={color} toneMapped={false} />
+      </mesh>
+      {house ? (
+        <mesh position={[0, 0.02, 0]} rotation={[0, Math.PI / 4, 0]} raycast={() => undefined}>
+          <coneGeometry args={[0.015, 0.012, 4]} />
+          <meshBasicMaterial color={color} toneMapped={false} />
+        </mesh>
+      ) : null}
+      {selected ? (
+        <Html position={[0, 0.05, 0]} center distanceFactor={3.2} zIndexRange={[8, 0]} style={{ pointerEvents: "none" }}>
+          <div className="marker-label">{name}</div>
+        </Html>
+      ) : null}
+    </group>
+  );
+}
+
+export function DataNet() {
+  const selectNode = useLogistics((state) => state.selectNode);
+  const selectedId = useLogistics((state) => state.selectedId);
+  const byId = useMemo(() => new Map(HALLS.map((hall) => [hall.id, hall])), []);
+  const cables = useMemo(
+    () =>
+      GLASS.flatMap((cable) => {
+        const from = byId.get(cable.from);
+        const to = byId.get(cable.to);
+        if (!from || !to) return [];
+        const fast = cable.kind === "land" ? 0.42 : 0.75 + Math.min(cable.tbps ?? 40, 400) / 520;
+        return [
+          {
+            id: cable.id,
+            color: glassColor(cable.kind),
+            speed: fast,
+            points: arcBetween(from.lat, from.lon, to.lat, to.lon, 1.012 + cable.lift * 0.004),
+          },
+        ];
+      }),
+    [byId],
+  );
+  return (
+    <group>
+      {cables.map((cable) => (
+        <Ribbon key={cable.id} points={cable.points} color={cable.color} width={MARK} speed={cable.speed} gain={0.95} />
+      ))}
+      {HALLS.map((hall) => (
+        <DataMark
+          key={hall.id}
+          hall={hall}
+          selected={selectedId === hall.id}
+          onSelect={() => selectNode(selectedId === hall.id ? null : hall.id)}
+        />
+      ))}
+    </group>
+  );
+}
+
+function DataMark({
+  hall,
+  selected,
+  onSelect,
+}: {
+  hall: (typeof HALLS)[number];
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const group = useRef<THREE.Group>(null);
+  const campus = hall.role !== "landing";
+  const position = useMemo(() => latLonToXYZ(hall.lat, hall.lon, 1.02), [hall.lat, hall.lon]);
+  const outward = useMemo(() => new THREE.Vector3(...position).normalize(), [position]);
+  const quat = useMemo(() => new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), outward), [outward]);
+  useFrame(({ camera }) => {
+    group.current?.scale.setScalar(calmZoom(camera.position.length()) * (selected ? 1.12 : 1) * 0.82);
+  });
+  const label = hall.ix ? `${hall.name} · ${hall.ix}` : hall.name;
+  return (
+    <group ref={group} position={position} quaternion={quat}>
+      <mesh
+        position={[0, campus ? 0.016 : 0.004, 0]}
+        rotation={campus ? [0, 0, 0] : [Math.PI / 2, 0, 0]}
+        onClick={(event) => {
+          event.stopPropagation();
+          onSelect();
+        }}
+      >
+        {campus ? <boxGeometry args={[0.011, 0.028, 0.009]} /> : <torusGeometry args={[0.012, 0.0015, 8, 20]} />}
+        <meshBasicMaterial color={campus ? "#9fd4ff" : "#6ec8ff"} toneMapped={false} />
+      </mesh>
+      {hall.role === "both" ? (
+        <mesh position={[0, 0.004, 0]} rotation={[Math.PI / 2, 0, 0]} raycast={() => undefined}>
+          <torusGeometry args={[0.016, 0.0013, 8, 20]} />
+          <meshBasicMaterial color="#6ec8ff" toneMapped={false} />
+        </mesh>
+      ) : null}
+      {hall.ix ? (
+        <mesh position={[0, 0.006, 0]} rotation={[Math.PI / 2, 0, 0]} raycast={() => undefined}>
+          <torusGeometry args={[0.02, 0.0011, 8, 24]} />
+          <meshBasicMaterial color="#e6c36a" toneMapped={false} />
+        </mesh>
+      ) : null}
+      {selected ? (
+        <Html position={[0, 0.05, 0]} center distanceFactor={3.2} zIndexRange={[8, 0]} style={{ pointerEvents: "none" }}>
+          <div className="marker-label">{label}</div>
         </Html>
       ) : null}
     </group>

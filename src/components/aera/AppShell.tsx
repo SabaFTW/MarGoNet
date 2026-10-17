@@ -11,7 +11,27 @@ import { SpanBar } from "@/components/aera/SpanBar";
 import { YearWheel } from "@/components/aera/YearWheel";
 import { useLogistics } from "@/lib/logistics/store";
 import { FlowPanel, PlanPanel, StockPanel } from "@/components/logistics/LogisticsPanels";
-import { GridBottom, GridLeft, GridRight, MaterialBottom, MaterialLeft, MaterialRight } from "@/components/logistics/ExtraPanels";
+import { AnimalBottom, AnimalLeft, AnimalRight, DataBottom, DataLeft, DataRight, GridBottom, GridLeft, GridRight, MaterialBottom, MaterialLeft, MaterialRight, WasteBottom, WasteLeft, WasteRight } from "@/components/logistics/ExtraPanels";
+
+const MODES = [
+  { id: "history", label: "History", color: "#c4a574" },
+  { id: "logistics", label: "Flow", color: "#e08a3c" },
+  { id: "grid", label: "Grid", color: "#7ddec4" },
+  { id: "materials", label: "Raw", color: "#e6c36a" },
+  { id: "waste", label: "Waste", color: "#d4534a" },
+  { id: "animal", label: "Animals", color: "#6eb7c8" },
+  { id: "data", label: "Data", color: "#6ec8ff" },
+] as const;
+
+const KICKER: Record<(typeof MODES)[number]["id"], string> = {
+  history: "Earth timeline",
+  logistics: "Flow",
+  grid: "Electrogrid",
+  materials: "Raw material",
+  waste: "Waste",
+  animal: "Animals",
+  data: "Data",
+};
 
 export function AppShell() {
   const year = useTimeline((state) => state.year);
@@ -31,18 +51,29 @@ export function AppShell() {
   const setTabsOn = useLogistics((state) => state.setTabsOn);
   const placing = useLogistics((state) => state.placing);
   const [arriving, setArriving] = useState(true);
+  const [entered, setEntered] = useState(false);
 
   const selected = findEvent(custom, selectedId);
   const active = allEvents(custom).filter((event) => isChecked(checked, event.id));
   const line = meanwhile(year, active, selected);
   const era = year < 0 ? "BC" : year === 0 ? "BC · AD" : "AD";
-  const bare = !panels.left && !panels.right && !panels.bottom;
   const spoken = year === 0 ? "year 0" : year < 0 ? `${Math.abs(year)} BC` : `${year} AD`;
 
   useEffect(() => {
     const id = window.setTimeout(() => setArriving(false), 760);
     return () => window.clearTimeout(id);
   }, []);
+
+  useEffect(() => {
+    if (!tabsOn) return;
+    const onPointer = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest(".mode-row, .wordmark")) return;
+      setTabsOn(false);
+    };
+    window.addEventListener("pointerdown", onPointer);
+    return () => window.removeEventListener("pointerdown", onPointer);
+  }, [setTabsOn, tabsOn]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -76,112 +107,141 @@ export function AppShell() {
 
   return (
     <div className="sky relative h-dvh w-full overflow-hidden text-fg">
-      <div className={`omen omen-hydra ${mode === "history" ? "omen-on" : ""}`} aria-hidden />
-      <div className={`omen omen-baphomet ${mode === "logistics" ? "omen-on" : ""}`} aria-hidden />
-      <div className={`omen omen-grid ${mode === "grid" ? "omen-on" : ""}`} aria-hidden />
-      <div className={`omen omen-materials ${mode === "materials" ? "omen-on" : ""}`} aria-hidden />
-      <div className="globe-root absolute inset-0">
-        <EarthScene />
-      </div>
+      <div className={`omen omen-hydra ${!entered || mode === "history" ? "omen-on" : ""}`} aria-hidden />
+      <div className={`omen omen-baphomet ${entered && mode === "logistics" ? "omen-on" : ""}`} aria-hidden />
+      <div className={`omen omen-grid ${entered && mode === "grid" ? "omen-on" : ""}`} aria-hidden />
+      <div className={`omen omen-materials ${entered && mode === "materials" ? "omen-on" : ""}`} aria-hidden />
+      <div className={`omen omen-waste ${entered && mode === "waste" ? "omen-on" : ""}`} aria-hidden />
+      <div className={`omen omen-animal ${entered && mode === "animal" ? "omen-on" : ""}`} aria-hidden />
+      <div className={`omen omen-data ${entered && mode === "data" ? "omen-on" : ""}`} aria-hidden />
+      {entered ? (
+        <div className="globe-root globe-in absolute inset-0">
+          <EarthScene />
+        </div>
+      ) : null}
       <div className="vignette pointer-events-none absolute inset-0" />
       <FrameStyle />
 
-      <header className="chrome-rise pointer-events-none absolute inset-x-0 top-0 z-30 px-6 pt-4 text-center">
-        <p className="kicker">
-          {mode === "history" ? "Earth timeline" : mode === "grid" ? "Electrogrid" : mode === "materials" ? "Raw material" : "MarGoNet"}
-        </p>
-        <h1 className="wordmark mt-1">AERA</h1>
-        {tabsOn ? (
-          <div className="mode-tabs mt-2" role="tablist" aria-label="Mode">
-            {(
-              [
-                ["history", "History"],
-                ["logistics", "Flow"],
-                ["grid", "Grid"],
-                ["materials", "Raw"],
-              ] as const
-            ).map(([id, label]) => (
-              <button key={id} type="button" role="tab" aria-selected={mode === id} onClick={() => setMode(id)}>
-                {label}
-              </button>
-            ))}
-            <button type="button" className="mode-hide" onClick={() => setTabsOn(false)} aria-label="Hide modes">
-              hide
+      {!entered ? (
+        <section className="gate">
+          <div className="gate-card">
+            <p className="kicker">Before the earth</p>
+            <h1 className="wordmark mt-3">AERA</h1>
+            <p className="lede mx-auto mt-6 max-w-xl font-display text-2xl italic leading-snug text-fg/95">{line.body}</p>
+            <p className="mx-auto mt-4 max-w-md text-sm text-muted">{line.kicker}</p>
+            <ul className="mx-auto mt-8 max-w-md space-y-2 text-left text-sm text-muted">
+              <li>Flow keeps one current toward the sun. Cargo also ends in Asia, Africa and the Americas.</li>
+              <li>Grid paints a halo: mint is spare, gold is even, red is hungry.</li>
+              <li>Raw is the rest. Forest to planks, mine to bars, sand to bags.</li>
+              <li>Waste stays in the city. Food is the largest thing a household throws away.</li>
+              <li>Animals move as meat and fish. China eats its own pigs.</li>
+              <li>Data stays in the building. Only the light in the glass moves.</li>
+            </ul>
+            <button type="button" className="gate-enter" onClick={() => setEntered(true)}>
+              Open the earth
             </button>
           </div>
-        ) : (
-          <button type="button" className="mode-peek pointer-events-auto mt-2" onClick={() => setTabsOn(true)}>
-            modes
+        </section>
+      ) : null}
+
+      <header className={`chrome-rise pointer-events-none absolute inset-x-0 top-0 z-30 px-6 pt-4 text-center ${entered ? "" : "invisible"}`}>
+        <p className="kicker">
+          {KICKER[mode]}
+        </p>
+        <h1 className="mt-1">
+          <button type="button" className="wordmark pointer-events-auto" aria-expanded={tabsOn} onClick={() => setTabsOn(!tabsOn)}>
+            AERA
           </button>
-        )}
-        <button type="button" className={`drift-toggle pointer-events-auto ${drift ? "drift-on" : ""}`} onClick={() => setDrift(!drift)} aria-pressed={drift}>
-          {drift ? "Drift on" : "Drift off"}
-        </button>
+        </h1>
+        <div className={`mode-row pointer-events-auto ${tabsOn ? "mode-row-open" : ""}`} role="tablist" aria-label="Mode" aria-hidden={!tabsOn}>
+          {MODES.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              role="tab"
+              aria-selected={mode === item.id}
+              onClick={() => setMode(item.id)}
+            >
+              <span
+                className="mode-pip"
+                style={mode === item.id ? { background: item.color, borderColor: item.color, boxShadow: `0 0 12px ${item.color}` } : undefined}
+              />
+              {item.label}
+            </button>
+          ))}
+          <button type="button" className={drift ? "drift-on" : ""} aria-pressed={drift} onClick={() => setDrift(!drift)}>
+            <span className="mode-pip" style={drift ? { background: "#c4a574", borderColor: "#c4a574" } : undefined} />
+            Drift
+          </button>
+        </div>
         {mode === "history" ? (
-          <>
-            <div className="mt-2 flex items-end justify-center gap-3">
-              <p className="year-display" aria-live="polite">
-                <span className="sr-only">{spoken}</span>
-                <RollingYear year={year} />
-              </p>
-              <span key={era} className="era era-swap">
-                {era}
-              </span>
-            </div>
-            <p className="kicker mt-2">{line.kicker}</p>
-            <p className="lede clamp-3 mx-auto mt-1 max-w-xl text-pretty font-display text-base italic leading-snug text-fg/95">
-              {line.body}
+          <div className="mt-3 flex items-end justify-center gap-3">
+            <p className="year-display" aria-live="polite">
+              <span className="sr-only">{spoken}</span>
+              <RollingYear year={year} />
             </p>
-            {selected ? (
-              <button
-                type="button"
-                className="chip-pop pointer-events-auto mt-2 inline-flex items-center gap-1 text-xs text-muted"
-                onClick={() => select(null, { fly: false })}
-              >
-                <X className="size-3.5" />
-                Clear selection
-              </button>
-            ) : null}
-          </>
-        ) : (
-          <p className="lede clamp-3 mx-auto mt-2 max-w-xl text-pretty font-display text-base italic leading-snug text-fg/95">
-            {mode === "grid"
-              ? "A plant keeps a halo. Mint is spare, gold is even, red is a city that eats more than it makes."
-              : mode === "materials"
-                ? "Forest becomes planks. A mine becomes bars. Sand becomes bags, then filters. Food stays on the other tab."
-                : "One current, toward the sun. Technology is a link in the oath, not the top of it. A local no still closes the valve."}
-          </p>
-        )}
-        {bare ? <p className="mt-2 text-xs text-muted">The ledger, the years, and the span are tucked away.</p> : null}
+            <span key={era} className="era era-swap">
+              {era}
+            </span>
+          </div>
+        ) : null}
+        {selected && mode === "history" ? (
+          <button
+            type="button"
+            className="chip-pop pointer-events-auto mt-2 inline-flex items-center gap-1 text-xs text-muted"
+            onClick={() => select(null, { fly: false })}
+          >
+            <X className="size-3.5" />
+            Clear selection
+          </button>
+        ) : null}
       </header>
 
-      {placing ? (
+      {entered && placing ? (
         <p className="pin-banner pointer-events-none absolute top-44 z-30 rounded-full bg-brass px-4 py-2 text-sm text-bg">
           Click the Earth. This color bends toward the new point.
         </p>
-      ) : pinArmed ? (
+      ) : entered && pinArmed ? (
         <p className="pin-banner pointer-events-none absolute top-44 z-30 rounded-full bg-brass px-4 py-2 text-sm text-bg">
           Click the Earth to place this event
         </p>
       ) : null}
 
-      {mode === "history" ? (
+      {!entered ? null : mode === "history" ? (
         <>
           <LeftLedger arriving={arriving} />
           <YearWheel arriving={arriving} />
           <SpanBar arriving={arriving} />
         </>
-      ) : mode === "grid" ? (
+      ) : entered && mode === "grid" ? (
         <>
           <GridLeft arriving={arriving} />
           <GridRight arriving={arriving} />
           <GridBottom arriving={arriving} />
         </>
-      ) : mode === "materials" ? (
+      ) : entered && mode === "materials" ? (
         <>
           <MaterialLeft arriving={arriving} />
           <MaterialRight arriving={arriving} />
           <MaterialBottom arriving={arriving} />
+        </>
+      ) : entered && mode === "waste" ? (
+        <>
+          <WasteLeft arriving={arriving} />
+          <WasteRight arriving={arriving} />
+          <WasteBottom arriving={arriving} />
+        </>
+      ) : entered && mode === "animal" ? (
+        <>
+          <AnimalLeft arriving={arriving} />
+          <AnimalRight arriving={arriving} />
+          <AnimalBottom arriving={arriving} />
+        </>
+      ) : entered && mode === "data" ? (
+        <>
+          <DataLeft arriving={arriving} />
+          <DataRight arriving={arriving} />
+          <DataBottom arriving={arriving} />
         </>
       ) : (
         <>
@@ -191,34 +251,34 @@ export function AppShell() {
         </>
       )}
 
-      {!panels.left ? (
+      {!entered ? null : !panels.left ? (
         <button
           type="button"
           className="glass edge-left absolute top-1/2 left-3 z-30 flex h-11 items-center gap-2 px-3 text-sm"
           onClick={() => togglePanel("left")}
         >
           <PanelLeft className="size-4" />
-          {mode === "history" ? "Ledger" : mode === "grid" ? "Plants" : mode === "materials" ? "Raw" : "Plan"}
+          {mode === "history" ? "Ledger" : mode === "grid" ? "Plants" : mode === "materials" ? "Raw" : mode === "waste" ? "Bins" : mode === "animal" ? "Herds" : mode === "data" ? "Halls" : "Plan"}
         </button>
       ) : null}
-      {!panels.right ? (
+      {entered && !panels.right ? (
         <button
           type="button"
           className="glass edge-right absolute top-1/2 right-3 z-30 flex h-11 items-center gap-2 px-3 text-sm"
           onClick={() => togglePanel("right")}
         >
-          {mode === "history" ? "Years" : mode === "grid" ? "Balance" : mode === "materials" ? "Places" : "Stocks"}
+          {mode === "history" ? "Years" : mode === "grid" ? "Load" : mode === "materials" ? "Places" : mode === "waste" ? "Cities" : mode === "animal" ? "Places" : mode === "data" ? "Rooms" : "Stocks"}
           <PanelRight className="size-4" />
         </button>
       ) : null}
-      {!panels.bottom ? (
+      {entered && !panels.bottom ? (
         <button
           type="button"
           className="glass edge-bottom absolute bottom-3 left-1/2 z-30 flex h-11 items-center gap-2 px-4 text-sm"
           onClick={() => togglePanel("bottom")}
         >
           <PanelBottom className="size-4" />
-          {mode === "history" ? "Span" : mode === "grid" ? "Cables" : mode === "materials" ? "Chains" : "Flow"}
+          {mode === "history" ? "Span" : mode === "grid" ? "Cables" : mode === "materials" ? "Chains" : mode === "waste" ? "Moved" : mode === "animal" ? "Lanes" : mode === "data" ? "Glass" : "Flow"}
         </button>
       ) : null}
     </div>

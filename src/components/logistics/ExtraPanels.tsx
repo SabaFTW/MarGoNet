@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
 import { X } from "lucide-react";
 import { ResizeHandle, useNarrow } from "@/components/aera/ResizeHandle";
-import { CHAINS, PLANTS } from "@/lib/logistics/chains";
+import { CHAINS, PLANTS, WIRES, arrivingGw, hungerColor } from "@/lib/logistics/chains";
+import { ANIMAL_KINDS, ANIMAL_LANES, BINS, HERDS, WASTE_KINDS, WASTE_LANES, animalColor } from "@/lib/logistics/life";
+import { GLASS, HALLS, glassColor, glassSystems } from "@/lib/logistics/net";
 import { useLogistics } from "@/lib/logistics/store";
 import { useTimeline } from "@/lib/timeline/store";
 
@@ -51,9 +53,9 @@ export function GridLeft({ arriving = false }: { arriving?: boolean }) {
   const selectNode = useLogistics((state) => state.selectNode);
   return (
     <Shell side="left" kicker="Installed, not a promise" title="Plants" arriving={arriving}>
-      <p className="px-4 pb-2 text-sm text-muted">Gigawatts you can look up. The load beside them is a sketch of who is hungry next door.</p>
+      <p className="px-4 pb-2 text-sm text-muted">A point is a plant. A house is a city. The wire leaves the plant and thins as it travels.</p>
       <ul className="scroll-thin min-h-0 flex-1 space-y-1 overflow-y-auto px-3 pb-3">
-        {PLANTS.map((plant) => (
+        {PLANTS.filter((plant) => plant.role === "plant").map((plant) => (
           <li key={plant.id}>
             <button type="button" className={`desk-row ${selectedId === plant.id ? "stock-on" : ""}`} onClick={() => selectNode(selectedId === plant.id ? null : plant.id)}>
               <span className="min-w-0 text-left">
@@ -69,25 +71,28 @@ export function GridLeft({ arriving = false }: { arriving?: boolean }) {
 }
 
 export function GridRight({ arriving = false }: { arriving?: boolean }) {
-  const rows = [...PLANTS].sort((a, b) => b.load / b.gw - a.load / a.gw);
   return (
-    <Shell side="right" kicker="Who is hungry" title="Balance" arriving={arriving}>
+    <Shell side="right" kicker="What the city drinks" title="Load" arriving={arriving}>
       <ul className="scroll-thin min-h-0 flex-1 space-y-2 overflow-y-auto px-4 pb-4">
-        {rows.map((plant) => {
-          const ratio = plant.load / plant.gw;
-          const tone = ratio < 0.75 ? "#7ddec4" : ratio < 1.05 ? "#e6c36a" : "#d4534a";
-          return (
-            <li key={plant.id} className="text-sm">
-              <span className="flex items-baseline justify-between gap-2">
-                <span>{plant.name}</span>
-                <span style={{ color: tone }}>{ratio < 1 ? "spare" : "hungry"}</span>
-              </span>
-              <span className="mt-1 block h-1.5 overflow-hidden rounded-full bg-white/10">
-                <span className="block h-full" style={{ width: `${Math.min(100, ratio * 50)}%`, background: tone }} />
-              </span>
-            </li>
-          );
-        })}
+        {PLANTS.filter((node) => node.role === "city")
+          .slice()
+          .sort((a, b) => b.load / Math.max(arrivingGw(b.id), 0.2) - a.load / Math.max(arrivingGw(a.id), 0.2))
+          .map((city) => {
+            const offered = arrivingGw(city.id);
+            const tone = hungerColor(city.load, offered);
+            const hungry = city.load > offered;
+            return (
+              <li key={city.id} className="text-sm">
+                <span className="flex items-baseline justify-between gap-2">
+                  <span>{city.name}</span>
+                  <span style={{ color: tone }}>{hungry ? "hungry" : "covered"}</span>
+                </span>
+                <span className="mt-0.5 block text-xs text-muted">
+                  drinks {city.load} GW · wire brings {offered} GW
+                </span>
+              </li>
+            );
+          })}
       </ul>
     </Shell>
   );
@@ -96,9 +101,16 @@ export function GridRight({ arriving = false }: { arriving?: boolean }) {
 export function GridBottom({ arriving = false }: { arriving?: boolean }) {
   return (
     <Shell side="bottom" kicker="Real wires" title="Cables" arriving={arriving}>
-      <p className="px-4 pb-3 text-sm text-muted">
-        NordLink is about 1.4 GW from south Norway toward the Netherlands. Gravelines sits near the French end of the cables that feed Britain and the Low Countries. A mint halo has spare power. Gold is even. Red is a city that eats more than it makes. Hoover, Itaipu and the Three Gorges stay as plants: they do not have a cartoon wire across an ocean.
-      </p>
+      <ul className="scroll-thin min-h-0 flex-1 space-y-2 overflow-y-auto px-4 pb-3">
+        {WIRES.map((wire) => (
+          <li key={wire.id} className="text-sm">
+            <span className="font-medium">{wire.name}</span>
+            <span className="mt-0.5 block text-xs text-muted">
+              {wire.gw} GW · {wire.note}
+            </span>
+          </li>
+        ))}
+      </ul>
     </Shell>
   );
 }
@@ -159,6 +171,182 @@ export function MaterialBottom({ arriving = false }: { arriving?: boolean }) {
           </p>
         ))}
       </div>
+    </Shell>
+  );
+}
+
+export function WasteLeft({ arriving = false }: { arriving?: boolean }) {
+  return (
+    <Shell side="left" kicker="Most of it never sails" title="Waste" arriving={arriving}>
+      <ul className="scroll-thin min-h-0 flex-1 space-y-3 overflow-y-auto px-4 pb-4">
+        {WASTE_KINDS.map((kind) => (
+          <li key={kind.id}>
+            <p className="text-sm font-medium" style={{ color: kind.color }}>{kind.label}</p>
+            <p className="text-sm">{kind.tonnes}</p>
+            <p className="mt-1 text-xs text-muted">{kind.note}</p>
+          </li>
+        ))}
+      </ul>
+    </Shell>
+  );
+}
+
+export function WasteRight({ arriving = false }: { arriving?: boolean }) {
+  const selectedId = useLogistics((state) => state.selectedId);
+  const selectNode = useLogistics((state) => state.selectNode);
+  const rows = BINS.slice().sort((a, b) => b.food * b.kg - a.food * a.kg);
+  return (
+    <Shell side="right" kicker="Food in the bin" title="Cities" arriving={arriving}>
+      <ul className="scroll-thin min-h-0 flex-1 space-y-1 overflow-y-auto px-3 pb-3">
+        {rows.map((bin) => (
+          <li key={bin.id}>
+            <button type="button" className={`desk-row ${selectedId === bin.id ? "stock-on" : ""}`} onClick={() => selectNode(selectedId === bin.id ? null : bin.id)}>
+              <span className="min-w-0 text-left">
+                <span className="block text-sm font-medium">{bin.name}</span>
+                <span className="block text-xs text-muted">
+                  {bin.kg} kg a person · {Math.round(bin.food * 100)}% of it food
+                </span>
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </Shell>
+  );
+}
+
+export function WasteBottom({ arriving = false }: { arriving?: boolean }) {
+  return (
+    <Shell side="bottom" kicker="Only what actually moves" title="Moved" arriving={arriving}>
+      <ul className="scroll-thin min-h-0 flex-1 space-y-2 overflow-y-auto px-4 pb-3">
+        {WASTE_LANES.map((lane) => (
+          <li key={lane.id} className="text-sm">
+            <span className="font-medium">{lane.name}</span>
+            <span className="mt-0.5 block text-xs text-muted">{lane.note}</span>
+          </li>
+        ))}
+      </ul>
+    </Shell>
+  );
+}
+
+export function AnimalLeft({ arriving = false }: { arriving?: boolean }) {
+  return (
+    <Shell side="left" kicker="Raised, then eaten" title="Herds" arriving={arriving}>
+      <p className="px-4 pb-2 text-sm text-muted">What never gets eaten stays on the Waste tab. It is food in a bin, not another ship.</p>
+      <ul className="scroll-thin min-h-0 flex-1 space-y-3 overflow-y-auto px-4 pb-4">
+        {ANIMAL_KINDS.map((kind) => (
+          <li key={kind.id}>
+            <p className="text-sm font-medium" style={{ color: kind.color }}>{kind.label}</p>
+            <p className="mt-1 text-xs text-muted">{kind.note}</p>
+          </li>
+        ))}
+      </ul>
+    </Shell>
+  );
+}
+
+export function AnimalRight({ arriving = false }: { arriving?: boolean }) {
+  const selectedId = useLogistics((state) => state.selectedId);
+  const selectNode = useLogistics((state) => state.selectNode);
+  return (
+    <Shell side="right" kicker="Source or city" title="Places" arriving={arriving}>
+      <ul className="scroll-thin min-h-0 flex-1 space-y-1 overflow-y-auto px-3 pb-3">
+        {HERDS.map((herd) => (
+          <li key={herd.id}>
+            <button type="button" className={`desk-row ${selectedId === herd.id ? "stock-on" : ""}`} onClick={() => selectNode(selectedId === herd.id ? null : herd.id)}>
+              <span className="size-2 shrink-0 rounded-full" style={{ background: animalColor(herd.kind) }} />
+              <span className="min-w-0 text-left">
+                <span className="block text-sm font-medium">{herd.name}</span>
+                <span className="block text-xs text-muted">
+                  {herd.role === "source" ? "Raises" : "Eats"} · {herd.note}
+                </span>
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </Shell>
+  );
+}
+
+export function AnimalBottom({ arriving = false }: { arriving?: boolean }) {
+  return (
+    <Shell side="bottom" kicker="Not toward Europe by default" title="Lanes" arriving={arriving}>
+      <ul className="scroll-thin min-h-0 flex-1 space-y-2 overflow-y-auto px-4 pb-3">
+        {ANIMAL_LANES.map((lane) => {
+          const from = HERDS.find((herd) => herd.id === lane.from)?.name;
+          const to = HERDS.find((herd) => herd.id === lane.to)?.name;
+          return (
+            <li key={lane.id} className="text-sm">
+              <span className="font-medium" style={{ color: animalColor(lane.kind) }}>
+                {from} → {to}
+              </span>
+              <span className="mt-0.5 block text-xs text-muted">{lane.note}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </Shell>
+  );
+}
+
+const DATA_SYSTEMS = glassSystems(GLASS.filter((cable) => cable.kind !== "land"));
+
+export function DataLeft({ arriving = false }: { arriving?: boolean }) {
+  return (
+    <Shell side="left" kicker="The building stays" title="Data" arriving={arriving}>
+      <div className="scroll-thin min-h-0 flex-1 space-y-3 overflow-y-auto px-4 pb-4 text-sm">
+        <p className="text-muted">A datacenter does not travel. The cable does not travel. The light in the glass does, at about two thirds of the speed of light. Across the Atlantic that is about 60 milliseconds, there and back.</p>
+        <p className="text-muted">The terabit number is a design ceiling, not today's traffic and not a speed test. Lit capacity is whatever the owners have turned on.</p>
+        <p className="text-muted">Cyan is an ocean cable. Violet is a short sea hop. Brass is terrestrial, and it has no single design number. Every line is the chord between two places, not the path on the seabed.</p>
+      </div>
+    </Shell>
+  );
+}
+
+export function DataRight({ arriving = false }: { arriving?: boolean }) {
+  const selectedId = useLogistics((state) => state.selectedId);
+  const selectNode = useLogistics((state) => state.selectNode);
+  const rooms = HALLS.filter((hall) => hall.role !== "landing").slice().sort((a, b) => b.weight - a.weight || a.name.localeCompare(b.name));
+  return (
+    <Shell side="right" kicker="Weight, not megawatts" title="Rooms" arriving={arriving}>
+      <ul className="scroll-thin min-h-0 flex-1 space-y-1 overflow-y-auto px-3 pb-3">
+        {rooms.map((hall) => (
+          <li key={hall.id}>
+            <button type="button" className={`desk-row ${selectedId === hall.id ? "stock-on" : ""}`} onClick={() => selectNode(selectedId === hall.id ? null : hall.id)}>
+              <span className="min-w-0 text-left">
+                <span className="block text-sm font-medium">
+                  {hall.name}
+                  {hall.ix ? <span className="text-muted"> · {hall.ix}</span> : null}
+                </span>
+                <span className="block text-xs text-muted">
+                  {"●".repeat(hall.weight)}
+                  {"○".repeat(5 - hall.weight)} · {hall.note}
+                </span>
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </Shell>
+  );
+}
+
+export function DataBottom({ arriving = false }: { arriving?: boolean }) {
+  return (
+    <Shell side="bottom" kicker="Design ceiling" title="Glass" arriving={arriving}>
+      <ul className="scroll-thin min-h-0 flex-1 space-y-2 overflow-y-auto px-4 pb-3">
+        {DATA_SYSTEMS.map((system) => (
+          <li key={system.name} className="text-sm">
+            <span className="font-medium" style={{ color: glassColor(system.kind) }}>
+              {system.name}
+              {system.tbps ? ` · about ${system.tbps} Tbps` : " · no single number"}
+            </span>
+            <span className="mt-0.5 block text-xs text-muted">{system.note}</span>
+          </li>
+        ))}
+      </ul>
     </Shell>
   );
 }
